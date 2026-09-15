@@ -89,10 +89,43 @@
   .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: 0.9rem; }
   .error { color: var(--danger); font-size: 0.85rem; margin: 6px 0; }
   [hidden] { display: none !important; }
+
+  .auth-bar { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-bottom: 16px; }
+  .auth-bar .who { color: var(--muted); margin-right: auto; }
+  .auth-bar button { padding: 6px 12px; font-size: 0.82rem; }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="auth-bar">
+    <span class="who" id="auth-who"></span>
+    <button class="secondary" id="btn-login">로그인</button>
+    <button class="secondary" id="btn-register">회원가입</button>
+    <button class="secondary" id="btn-logout" hidden>로그아웃</button>
+  </div>
+
+  <!-- 로그인 폼 -->
+  <div class="card" id="login-form" hidden>
+    <input id="login-username" placeholder="아이디">
+    <input id="login-password" type="password" placeholder="비밀번호">
+    <div class="error" id="login-error" hidden></div>
+    <div class="row">
+      <button id="login-submit">로그인</button>
+      <button class="secondary" id="login-cancel">취소</button>
+    </div>
+  </div>
+
+  <!-- 회원가입 폼 -->
+  <div class="card" id="register-form" hidden>
+    <input id="register-username" placeholder="아이디 (4자 이상)">
+    <input id="register-password" type="password" placeholder="비밀번호 (8자 이상)">
+    <div class="error" id="register-error" hidden></div>
+    <div class="row">
+      <button id="register-submit">가입하기</button>
+      <button class="secondary" id="register-cancel">취소</button>
+    </div>
+  </div>
+
   <div class="top-actions">
     <div>
       <h1>게시판</h1>
@@ -127,7 +160,6 @@
     <div id="comment-list"></div>
 
     <div class="card">
-      <input id="comment-author" placeholder="작성자" maxlength="50">
       <textarea id="comment-content" placeholder="댓글 내용" rows="2"></textarea>
       <div class="error" id="comment-error" hidden></div>
       <button id="comment-submit">댓글 등록</button>
@@ -136,16 +168,34 @@
 </div>
 
 <script>
+// ---------- 인증 상태 ----------
+function getToken() { return localStorage.getItem('token'); }
+function getUsername() { return localStorage.getItem('username'); }
+function setAuth(token, username) {
+  localStorage.setItem('token', token);
+  localStorage.setItem('username', username);
+}
+function clearAuth() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+}
+function authHeaders() {
+  const token = getToken();
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 const api = {
   posts: () => fetch('/api/posts').then(r => r.json()),
   post: (id) => fetch(`/api/posts/${id}`).then(r => r.json()),
-  createPost: (body) => fetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
-  updatePost: (id, body) => fetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
-  deletePost: (id) => fetch(`/api/posts/${id}`, { method: 'DELETE' }),
+  createPost: (body) => fetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
+  updatePost: (id, body) => fetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
+  deletePost: (id) => fetch(`/api/posts/${id}`, { method: 'DELETE', headers: authHeaders() }),
   comments: (postId) => fetch(`/api/posts/${postId}/comments`).then(r => r.json()),
-  createComment: (postId, body) => fetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
-  updateComment: (id, body) => fetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
-  deleteComment: (id) => fetch(`/api/comments/${id}`, { method: 'DELETE' }),
+  createComment: (postId, body) => fetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
+  updateComment: (id, body) => fetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
+  deleteComment: (id) => fetch(`/api/comments/${id}`, { method: 'DELETE', headers: authHeaders() }),
+  register: (body) => fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  login: (body) => fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
 };
 
 const el = (id) => document.getElementById(id);
@@ -164,6 +214,74 @@ async function readError(res, fallback) {
     return fallback;
   }
 }
+
+// ---------- 인증 UI ----------
+function renderAuthBar() {
+  const username = getUsername();
+  const loggedIn = !!username;
+  el('auth-who').textContent = loggedIn ? `${username}님 환영합니다` : '로그인이 필요합니다';
+  el('btn-login').hidden = loggedIn;
+  el('btn-register').hidden = loggedIn;
+  el('btn-logout').hidden = !loggedIn;
+}
+
+el('btn-login').addEventListener('click', () => {
+  el('login-form').hidden = false;
+  el('register-form').hidden = true;
+  el('login-username').value = '';
+  el('login-password').value = '';
+  el('login-error').hidden = true;
+});
+el('login-cancel').addEventListener('click', () => { el('login-form').hidden = true; });
+el('login-submit').addEventListener('click', async () => {
+  const username = el('login-username').value.trim();
+  const password = el('login-password').value;
+  const errBox = el('login-error');
+  errBox.hidden = true;
+
+  const res = await api.login({ username, password });
+  if (res.ok) {
+    const data = await res.json();
+    setAuth(data.token, data.username);
+    el('login-form').hidden = true;
+    renderAuthBar();
+  } else {
+    errBox.textContent = await readError(res, '로그인에 실패했습니다.');
+    errBox.hidden = false;
+  }
+});
+
+el('btn-register').addEventListener('click', () => {
+  el('register-form').hidden = false;
+  el('login-form').hidden = true;
+  el('register-username').value = '';
+  el('register-password').value = '';
+  el('register-error').hidden = true;
+});
+el('register-cancel').addEventListener('click', () => { el('register-form').hidden = true; });
+el('register-submit').addEventListener('click', async () => {
+  const username = el('register-username').value.trim();
+  const password = el('register-password').value;
+  const errBox = el('register-error');
+  errBox.hidden = true;
+
+  const res = await api.register({ username, password });
+  if (res.ok) {
+    el('register-form').hidden = true;
+    alert('가입이 완료되었습니다. 로그인해주세요.');
+  } else {
+    errBox.textContent = await readError(res, '회원가입에 실패했습니다.');
+    errBox.hidden = false;
+  }
+});
+
+el('btn-logout').addEventListener('click', () => {
+  clearAuth();
+  renderAuthBar();
+  if (!el('view-detail').hidden) renderDetail();
+});
+
+renderAuthBar();
 
 // ---------- 목록 화면 ----------
 async function loadList() {
@@ -188,7 +306,7 @@ async function loadList() {
         <p class="post-excerpt"></p>
       `;
       item.querySelector('.post-title').textContent = post.title;
-      item.querySelector('.post-meta').textContent = fmt(post.createdAt);
+      item.querySelector('.post-meta').textContent = `${post.author} · ${fmt(post.createdAt)}`;
       item.querySelector('.post-excerpt').textContent = post.content;
       item.addEventListener('click', () => openDetail(post.id));
       list.appendChild(item);
@@ -200,6 +318,11 @@ async function loadList() {
 
 // ---------- 새 글 작성 ----------
 el('btn-new-post').addEventListener('click', () => {
+  if (!getToken()) {
+    alert('로그인이 필요합니다.');
+    el('btn-login').click();
+    return;
+  }
   el('new-post-form').hidden = false;
   el('new-post-title').value = '';
   el('new-post-content').value = '';
@@ -248,13 +371,21 @@ async function renderDetail() {
     </div>
   `;
   card.querySelector('.detail-title').textContent = post.title;
-  card.querySelector('.post-meta').textContent = `작성 ${fmt(post.createdAt)} · 수정 ${fmt(post.updatedAt)}`;
+  card.querySelector('.post-meta').textContent = `${post.author} · 작성 ${fmt(post.createdAt)} · 수정 ${fmt(post.updatedAt)}`;
   card.querySelector('.detail-content').textContent = post.content;
+
+  const isOwner = getUsername() === post.author;
+  card.querySelector('#btn-edit-post').hidden = !isOwner;
+  card.querySelector('#btn-delete-post').hidden = !isOwner;
 
   card.querySelector('#btn-delete-post').addEventListener('click', async () => {
     if (!confirm('게시글을 삭제하시겠습니까? 댓글도 함께 삭제됩니다.')) return;
-    await api.deletePost(post.id);
-    loadList();
+    const res = await api.deletePost(post.id);
+    if (res.ok) {
+      loadList();
+    } else {
+      alert(await readError(res, '삭제에 실패했습니다.'));
+    }
   });
 
   card.querySelector('#btn-edit-post').addEventListener('click', () => {
@@ -313,10 +444,18 @@ async function renderComments() {
     item.querySelector('.c-date').textContent = fmt(c.createdAt);
     item.querySelector('.comment-body').textContent = c.content;
 
+    const isOwner = getUsername() === c.author;
+    item.querySelector('[data-action="edit"]').hidden = !isOwner;
+    item.querySelector('[data-action="delete"]').hidden = !isOwner;
+
     item.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       if (!confirm('댓글을 삭제하시겠습니까?')) return;
-      await api.deleteComment(c.id);
-      renderComments();
+      const res = await api.deleteComment(c.id);
+      if (res.ok) {
+        renderComments();
+      } else {
+        alert(await readError(res, '삭제에 실패했습니다.'));
+      }
     });
 
     item.querySelector('[data-action="edit"]').addEventListener('click', () => {
@@ -342,14 +481,17 @@ async function renderComments() {
 }
 
 el('comment-submit').addEventListener('click', async () => {
-  const author = el('comment-author').value.trim();
+  if (!getToken()) {
+    alert('로그인이 필요합니다.');
+    el('btn-login').click();
+    return;
+  }
   const content = el('comment-content').value.trim();
   const errBox = el('comment-error');
   errBox.hidden = true;
 
-  const res = await api.createComment(currentPostId, { author, content });
+  const res = await api.createComment(currentPostId, { content });
   if (res.ok) {
-    el('comment-author').value = '';
     el('comment-content').value = '';
     renderComments();
   } else {

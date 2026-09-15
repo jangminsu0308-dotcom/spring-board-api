@@ -9,11 +9,7 @@ public class CommentDto {
     public record Request(
         @NotBlank(message = "내용은 필수입니다")
         @Size(max = 1000, message = "내용은 1000자를 넘을 수 없습니다")
-        String content,
-
-        @NotBlank(message = "작성자는 필수입니다")
-        @Size(max = 50, message = "작성자는 50자를 넘을 수 없습니다")
-        String author
+        String content
     ) {}
 
     public record UpdateRequest(
@@ -32,7 +28,7 @@ public class CommentDto {
             return new Response(
                 comment.getId(),
                 comment.getContent(),
-                comment.getAuthor(),
+                comment.getAuthor().getUsername(),
                 comment.getCreatedAt()
             );
         }

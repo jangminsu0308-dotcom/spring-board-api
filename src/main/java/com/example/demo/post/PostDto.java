@@ -19,6 +19,7 @@ public class PostDto {
 		Long id,
 		String title,
 		String content,
+		String author,
 		LocalDateTime createdAt,
 		LocalDateTime updatedAt
 	) {
@@ -27,6 +28,7 @@ public class PostDto {
 			post.getId(),
 			post.getTitle(),
 			post.getContent(),
+			post.getAuthor().getUsername(),
 			post.getCreatedAt(),
 			post.getUpdatedAt()
 			);

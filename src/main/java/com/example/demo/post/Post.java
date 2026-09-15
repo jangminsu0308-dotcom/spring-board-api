@@ -1,5 +1,6 @@
 package com.example.demo.post;
 
+import com.example.demo.auth.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -12,11 +13,11 @@ import java.util.List;
 @Getter
 @NoArgsConstructor
 public class Post {
-	
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
-	
+
 	@OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Comment> comments = new ArrayList<>();
 
@@ -26,14 +27,19 @@ public class Post {
 	@Column(columnDefinition = "TEXT")
 	private String content;
 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "user_id", nullable = false)
+	private User author;
+
 	@Column(updatable = false)
 	private LocalDateTime createdAt;
 
 	private LocalDateTime updatedAt;
 
-	public Post(String title, String content) {
-		this.title =title;
+	public Post(String title, String content, User author) {
+		this.title = title;
 		this.content = content;
+		this.author = author;
 	}
 	
 	@PrePersist

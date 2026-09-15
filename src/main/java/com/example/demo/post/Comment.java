@@ -1,5 +1,6 @@
 package com.example.demo.post;
 
+import com.example.demo.auth.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,8 +20,9 @@ public class Comment {
     @Column(nullable = false, length = 1000)
     private String content;
 
-    @Column(nullable = false, length = 50)
-    private String author;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User author;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "post_id", nullable = false)
@@ -29,7 +31,7 @@ public class Comment {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
-    public Comment(String content, String author, Post post) {
+    public Comment(String content, User author, Post post) {
         this.content = content;
         this.author = author;
         this.post = post;

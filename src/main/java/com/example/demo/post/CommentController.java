@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.List;
@@ -17,12 +18,13 @@ public class CommentController {
 
     private final CommentService commentService;
 
-    @Operation(summary = "댓글 작성")
+    @Operation(summary = "댓글 작성", description = "로그인이 필요합니다.")
     @PostMapping("/posts/{postId}/comments")
     public ResponseEntity<CommentDto.Response> create(
             @PathVariable Long postId,
-            @Valid @RequestBody CommentDto.Request request) {
-        CommentDto.Response response = commentService.create(postId, request);
+            @Valid @RequestBody CommentDto.Request request,
+            Authentication authentication) {
+        CommentDto.Response response = commentService.create(postId, request, authentication.getName());
         return ResponseEntity.created(URI.create("/api/comments/" + response.id())).body(response);
     }
 
@@ -32,18 +34,19 @@ public class CommentController {
         return commentService.findByPost(postId);
     }
 
-    @Operation(summary = "댓글 수정")
+    @Operation(summary = "댓글 수정", description = "본인이 작성한 댓글만 수정할 수 있습니다.")
     @PutMapping("/comments/{commentId}")
     public CommentDto.Response update(
             @PathVariable Long commentId,
-            @Valid @RequestBody CommentDto.UpdateRequest request) {
-        return commentService.update(commentId, request);
+            @Valid @RequestBody CommentDto.UpdateRequest request,
+            Authentication authentication) {
+        return commentService.update(commentId, request, authentication.getName());
     }
 
-    @Operation(summary = "댓글 삭제")
+    @Operation(summary = "댓글 삭제", description = "본인이 작성한 댓글만 삭제할 수 있습니다.")
     @DeleteMapping("/comments/{commentId}")
-    public ResponseEntity<Void> delete(@PathVariable Long commentId) {
-        commentService.delete(commentId);
+    public ResponseEntity<Void> delete(@PathVariable Long commentId, Authentication authentication) {
+        commentService.delete(commentId, authentication.getName());
         return ResponseEntity.noContent().build();
     }
 }

@@ -1,9 +1,13 @@
 package com.example.demo.post;
 
+import com.example.demo.security.JwtAuthenticationEntryPoint;
+import com.example.demo.security.JwtTokenProvider;
+import com.example.demo.security.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,10 +20,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PostController.class)
+@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtTokenProvider.class})
 class PostControllerTest {
 
     @Autowired
@@ -32,30 +38,43 @@ class PostControllerTest {
 
     @Test
     void 게시글_생성_성공시_201과_Location을_반환한다() throws Exception {
-        PostDto.Response response = new PostDto.Response(1L, "제목", "내용", LocalDateTime.now(), LocalDateTime.now());
-        when(postService.create(any(PostDto.Request.class))).thenReturn(response);
+        PostDto.Response response = new PostDto.Response(1L, "제목", "내용", "writer", LocalDateTime.now(), LocalDateTime.now());
+        when(postService.create(any(PostDto.Request.class), eq("writer"))).thenReturn(response);
 
         mockMvc.perform(post("/api/posts")
+                        .with(user("writer"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new PostDto.Request("제목", "내용"))))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/posts/1"))
-                .andExpect(jsonPath("$.title").value("제목"));
+                .andExpect(jsonPath("$.title").value("제목"))
+                .andExpect(jsonPath("$.author").value("writer"));
+    }
+
+    @Test
+    void 게시글_생성시_인증이_없으면_401을_반환한다() throws Exception {
+        mockMvc.perform(post("/api/posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new PostDto.Request("제목", "내용"))))
+                .andExpect(status().isUnauthorized());
+
+        verify(postService, never()).create(any(), any());
     }
 
     @Test
     void 게시글_생성시_제목이_비어있으면_400을_반환한다() throws Exception {
         mockMvc.perform(post("/api/posts")
+                        .with(user("writer"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new PostDto.Request("", "내용"))))
                 .andExpect(status().isBadRequest());
 
-        verify(postService, never()).create(any());
+        verify(postService, never()).create(any(), any());
     }
 
     @Test
     void 게시글_목록_조회() throws Exception {
-        PostDto.Response response = new PostDto.Response(1L, "제목", "내용", LocalDateTime.now(), LocalDateTime.now());
+        PostDto.Response response = new PostDto.Response(1L, "제목", "내용", "writer", LocalDateTime.now(), LocalDateTime.now());
         when(postService.findAll()).thenReturn(List.of(response));
 
         mockMvc.perform(get("/api/posts"))
@@ -76,10 +95,11 @@ class PostControllerTest {
 
     @Test
     void 게시글_수정() throws Exception {
-        PostDto.Response response = new PostDto.Response(1L, "수정된 제목", "수정된 내용", LocalDateTime.now(), LocalDateTime.now());
-        when(postService.update(eq(1L), any(PostDto.Request.class))).thenReturn(response);
+        PostDto.Response response = new PostDto.Response(1L, "수정된 제목", "수정된 내용", "writer", LocalDateTime.now(), LocalDateTime.now());
+        when(postService.update(eq(1L), any(PostDto.Request.class), eq("writer"))).thenReturn(response);
 
         mockMvc.perform(put("/api/posts/1")
+                        .with(user("writer"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new PostDto.Request("수정된 제목", "수정된 내용"))))
                 .andExpect(status().isOk())
@@ -88,9 +108,9 @@ class PostControllerTest {
 
     @Test
     void 게시글_삭제시_204를_반환한다() throws Exception {
-        mockMvc.perform(delete("/api/posts/1"))
+        mockMvc.perform(delete("/api/posts/1").with(user("writer")))
                 .andExpect(status().isNoContent());
 
-        verify(postService).delete(1L);
+        verify(postService).delete(1L, "writer");
     }
 }

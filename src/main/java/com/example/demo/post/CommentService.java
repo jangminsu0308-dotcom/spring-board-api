@@ -1,6 +1,9 @@
 package com.example.demo.post;
 
+import com.example.demo.auth.User;
+import com.example.demo.auth.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -12,12 +15,14 @@ public class CommentService {
 
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
+    private final UserRepository userRepository;
 
     @Transactional
-    public CommentDto.Response create(Long postId, CommentDto.Request request) {
+    public CommentDto.Response create(Long postId, CommentDto.Request request, String username) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new PostNotFoundException(postId));
-        Comment comment = new Comment(request.content(), request.author(), post);
+        User author = getUser(username);
+        Comment comment = new Comment(request.content(), author, post);
         return CommentDto.Response.from(commentRepository.save(comment));
     }
 
@@ -31,18 +36,30 @@ public class CommentService {
     }
 
     @Transactional
-    public CommentDto.Response update(Long commentId, CommentDto.UpdateRequest request) {
+    public CommentDto.Response update(Long commentId, CommentDto.UpdateRequest request, String username) {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new CommentNotFoundException(commentId));
+        validateOwner(comment.getAuthor().getUsername(), username);
         comment.update(request.content());
         return CommentDto.Response.from(comment);
     }
 
     @Transactional
-    public void delete(Long commentId) {
-        if (!commentRepository.existsById(commentId)) {
-            throw new CommentNotFoundException(commentId);
+    public void delete(Long commentId, String username) {
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new CommentNotFoundException(commentId));
+        validateOwner(comment.getAuthor().getUsername(), username);
+        commentRepository.delete(comment);
+    }
+
+    private User getUser(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalStateException("인증된 사용자를 찾을 수 없습니다: " + username));
+    }
+
+    private void validateOwner(String ownerUsername, String requestUsername) {
+        if (!ownerUsername.equals(requestUsername)) {
+            throw new AccessDeniedException("본인이 작성한 댓글만 수정/삭제할 수 있습니다");
         }
-        commentRepository.deleteById(commentId);
     }
 }
