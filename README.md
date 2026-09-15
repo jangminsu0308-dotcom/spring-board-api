@@ -90,6 +90,19 @@ com.example.demo
 
 계층별이 아닌 **도메인 단위** 구조로 관련 코드를 한곳에 모았습니다.
 
+## 테스트
+
+```bash
+./mvnw test
+```
+
+| 종류 | 대상 | 방식 |
+|---|---|---|
+| Service 단위 테스트 | `PostServiceTest`, `CommentServiceTest` | Mockito로 Repository를 목킹, DB 없이 비즈니스 로직만 검증 |
+| Controller 슬라이스 테스트 | `PostControllerTest`, `CommentControllerTest` | `@WebMvcTest` + MockMvc, Service를 목킹해 요청/응답·검증·예외 처리(404/400)를 검증 |
+
+정상 케이스뿐 아니라 존재하지 않는 리소스 조회·수정·삭제 시 예외가 올바르게 던져지는지, 잘못된 입력이 400으로 막히는지까지 함께 검증합니다.
+
 ## 실행 방법
 
 ```bash
