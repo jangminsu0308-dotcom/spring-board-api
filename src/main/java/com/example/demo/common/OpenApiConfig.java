@@ -13,7 +13,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("게시글 관리 API")
-                        .description("Sping Boot 기반 게시판 REST API")
+                        .description("Spring Boot 기반 게시판 REST API")
                         .version("v1.0"));
     }
 }

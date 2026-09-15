@@ -36,6 +36,18 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | GET | `/api/posts/{id}` | 단건 조회 | 200 |
 | PUT | `/api/posts/{id}` | 수정 | 200 |
 | DELETE | `/api/posts/{id}` | 삭제 | 204 |
+| POST | `/api/posts/{postId}/comments` | 댓글 작성 | 201 + Location |
+| GET | `/api/posts/{postId}/comments` | 게시글의 댓글 목록 조회 | 200 |
+| PUT | `/api/comments/{commentId}` | 댓글 수정 | 200 |
+| DELETE | `/api/comments/{commentId}` | 댓글 삭제 | 204 |
+
+## API 문서
+
+Swagger UI로 API 명세 확인 및 직접 테스트 가능
+
+```
+http://192.168.1.72/swagger-ui.html
+```
 
 ### 에러 응답
 
@@ -61,13 +73,19 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 ```
 com.example.demo
 ├── common          # 공통 (에러 응답, 전역 예외 처리)
-└── post            # 게시글 도메인
+└── post            # 게시글 / 댓글 도메인
     ├── Post                    # Entity
     ├── PostRepository          # Repository
     ├── PostDto                 # Request / Response
     ├── PostService             # 비즈니스 로직
     ├── PostController          # HTTP 처리
-    └── PostNotFoundException
+    ├── PostNotFoundException
+    ├── Comment                 # Entity (Post와 @ManyToOne)
+    ├── CommentRepository       # Repository
+    ├── CommentDto              # Request / Response
+    ├── CommentService          # 비즈니스 로직
+    ├── CommentController       # HTTP 처리
+    └── CommentNotFoundException
 ```
 
 계층별이 아닌 **도메인 단위** 구조로 관련 코드를 한곳에 모았습니다.
@@ -106,5 +124,8 @@ Entity를 그대로 응답하면 내부 구조 변경이 API 스펙 변경으로
 
 **애플리케이션을 root로 실행하지 않음**
 전용 시스템 계정(`demoapp`)을 만들어 systemd에서 지정했습니다.
+
+**댓글은 게시글에 종속**
+`@OneToMany(cascade = ALL, orphanRemoval = true)`로 연관관계를 맺어, 게시글이 삭제되면 댓글도 함께 삭제되도록 했습니다. 댓글만 따로 존재할 이유가 없기 때문입니다.
 
 ##
