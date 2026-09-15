@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>게시판</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --border: #e4e4e0;
+    --text: #1f1f1d;
+    --muted: #6b6b66;
+    --accent: #2f6f4f;
+    --accent-hover: #24593f;
+    --danger: #b3432b;
+    --danger-hover: #8f351f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+    padding: 24px 16px 64px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  button {
+    font: inherit;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+  }
+  button:hover { background: var(--accent-hover); }
+  button.secondary { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  button.secondary:hover { background: #eee; color: var(--text); }
+  button.danger { background: var(--danger); }
+  button.danger:hover { background: var(--danger-hover); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  input, textarea {
+    width: 100%;
+    font: inherit;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1; }
+
+  .top-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+  .post-item { cursor: pointer; }
+  .post-item:hover { border-color: var(--accent); }
+  .post-title { font-weight: 600; margin: 0 0 4px; }
+  .post-meta { font-size: 0.78rem; color: var(--muted); }
+  .post-excerpt { margin: 8px 0 0; color: #444; font-size: 0.9rem; white-space: pre-wrap; }
+
+  .detail-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 4px; }
+  .detail-content { white-space: pre-wrap; margin: 12px 0; line-height: 1.5; }
+  .detail-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+  .comments-heading { font-size: 0.95rem; font-weight: 600; margin: 20px 0 8px; }
+  .comment { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #fafaf8; }
+  .comment-head { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+  .comment-body { font-size: 0.92rem; white-space: pre-wrap; }
+  .comment-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .comment-actions button { padding: 4px 10px; font-size: 0.78rem; }
+
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: 0.9rem; }
+  .error { color: var(--danger); font-size: 0.85rem; margin: 6px 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-actions">
+    <div>
+      <h1>게시판</h1>
+      <div class="sub">Post / Comment CRUD 데모</div>
+    </div>
+    <button id="btn-new-post">글쓰기</button>
+  </div>
+
+  <!-- 새 글 작성 폼 -->
+  <div class="card" id="new-post-form" hidden>
+    <input id="new-post-title" placeholder="제목" maxlength="200">
+    <textarea id="new-post-content" placeholder="내용"></textarea>
+    <div class="error" id="new-post-error" hidden></div>
+    <div class="row">
+      <button id="new-post-submit">등록</button>
+      <button class="secondary" id="new-post-cancel">취소</button>
+    </div>
+  </div>
+
+  <!-- 목록 화면 -->
+  <div id="view-list">
+    <div id="post-list"></div>
+  </div>
+
+  <!-- 상세 화면 -->
+  <div id="view-detail" hidden>
+    <button class="secondary" id="btn-back">← 목록으로</button>
+
+    <div class="card" id="detail-card"></div>
+
+    <div class="comments-heading">댓글</div>
+    <div id="comment-list"></div>
+
+    <div class="card">
+      <input id="comment-author" placeholder="작성자" maxlength="50">
+      <textarea id="comment-content" placeholder="댓글 내용" rows="2"></textarea>
+      <div class="error" id="comment-error" hidden></div>
+      <button id="comment-submit">댓글 등록</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const api = {
+  posts: () => fetch('/api/posts').then(r => r.json()),
+  post: (id) => fetch(`/api/posts/${id}`).then(r => r.json()),
+  createPost: (body) => fetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  updatePost: (id, body) => fetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  deletePost: (id) => fetch(`/api/posts/${id}`, { method: 'DELETE' }),
+  comments: (postId) => fetch(`/api/posts/${postId}/comments`).then(r => r.json()),
+  createComment: (postId, body) => fetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  updateComment: (id, body) => fetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  deleteComment: (id) => fetch(`/api/comments/${id}`, { method: 'DELETE' }),
+};
+
+const el = (id) => document.getElementById(id);
+let currentPostId = null;
+
+function fmt(dateStr) {
+  if (!dateStr) return '';
+  return dateStr.replace('T', ' ').slice(0, 16);
+}
+
+async function readError(res, fallback) {
+  try {
+    const data = await res.json();
+    return data.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// ---------- 목록 화면 ----------
+async function loadList() {
+  el('view-detail').hidden = true;
+  el('view-list').hidden = false;
+  const list = el('post-list');
+  list.innerHTML = '<div class="empty">불러오는 중...</div>';
+
+  try {
+    const posts = await api.posts();
+    if (posts.length === 0) {
+      list.innerHTML = '<div class="empty">아직 게시글이 없습니다.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    posts.slice().reverse().forEach(post => {
+      const item = document.createElement('div');
+      item.className = 'card post-item';
+      item.innerHTML = `
+        <p class="post-title"></p>
+        <p class="post-meta"></p>
+        <p class="post-excerpt"></p>
+      `;
+      item.querySelector('.post-title').textContent = post.title;
+      item.querySelector('.post-meta').textContent = fmt(post.createdAt);
+      item.querySelector('.post-excerpt').textContent = post.content;
+      item.addEventListener('click', () => openDetail(post.id));
+      list.appendChild(item);
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="error">목록을 불러오지 못했습니다.</div>';
+  }
+}
+
+// ---------- 새 글 작성 ----------
+el('btn-new-post').addEventListener('click', () => {
+  el('new-post-form').hidden = false;
+  el('new-post-title').value = '';
+  el('new-post-content').value = '';
+  el('new-post-error').hidden = true;
+});
+el('new-post-cancel').addEventListener('click', () => {
+  el('new-post-form').hidden = true;
+});
+el('new-post-submit').addEventListener('click', async () => {
+  const title = el('new-post-title').value.trim();
+  const content = el('new-post-content').value.trim();
+  const errBox = el('new-post-error');
+  errBox.hidden = true;
+
+  const res = await api.createPost({ title, content });
+  if (res.ok) {
+    el('new-post-form').hidden = true;
+    loadList();
+  } else {
+    errBox.textContent = await readError(res, '등록에 실패했습니다.');
+    errBox.hidden = false;
+  }
+});
+
+// ---------- 상세 화면 ----------
+el('btn-back').addEventListener('click', loadList);
+
+async function openDetail(id) {
+  currentPostId = id;
+  el('view-list').hidden = true;
+  el('view-detail').hidden = false;
+  await renderDetail();
+  await renderComments();
+}
+
+async function renderDetail() {
+  const post = await api.post(currentPostId);
+  const card = el('detail-card');
+  card.innerHTML = `
+    <p class="detail-title"></p>
+    <p class="post-meta"></p>
+    <div class="detail-content"></div>
+    <div class="detail-actions">
+      <button class="secondary" id="btn-edit-post">수정</button>
+      <button class="danger" id="btn-delete-post">삭제</button>
+    </div>
+  `;
+  card.querySelector('.detail-title').textContent = post.title;
+  card.querySelector('.post-meta').textContent = `작성 ${fmt(post.createdAt)} · 수정 ${fmt(post.updatedAt)}`;
+  card.querySelector('.detail-content').textContent = post.content;
+
+  card.querySelector('#btn-delete-post').addEventListener('click', async () => {
+    if (!confirm('게시글을 삭제하시겠습니까? 댓글도 함께 삭제됩니다.')) return;
+    await api.deletePost(post.id);
+    loadList();
+  });
+
+  card.querySelector('#btn-edit-post').addEventListener('click', () => {
+    card.innerHTML = `
+      <input id="edit-title" value="${post.title.replace(/"/g,'&quot;')}">
+      <textarea id="edit-content"></textarea>
+      <div class="error" id="edit-error" hidden></div>
+      <div class="row">
+        <button id="edit-submit">저장</button>
+        <button class="secondary" id="edit-cancel">취소</button>
+      </div>
+    `;
+    card.querySelector('#edit-content').value = post.content;
+    card.querySelector('#edit-cancel').addEventListener('click', renderDetail);
+    card.querySelector('#edit-submit').addEventListener('click', async () => {
+      const title = card.querySelector('#edit-title').value.trim();
+      const content = card.querySelector('#edit-content').value.trim();
+      const res = await api.updatePost(post.id, { title, content });
+      if (res.ok) {
+        renderDetail();
+      } else {
+        const errBox = card.querySelector('#edit-error');
+        errBox.textContent = await readError(res, '수정에 실패했습니다.');
+        errBox.hidden = false;
+      }
+    });
+  });
+}
+
+// ---------- 댓글 ----------
+async function renderComments() {
+  const list = el('comment-list');
+  list.innerHTML = '<div class="empty">불러오는 중...</div>';
+  const comments = await api.comments(currentPostId);
+
+  if (comments.length === 0) {
+    list.innerHTML = '<div class="empty">첫 댓글을 남겨보세요.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  comments.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'comment';
+    item.innerHTML = `
+      <div class="comment-head">
+        <span class="c-author"></span>
+        <span class="c-date"></span>
+      </div>
+      <div class="comment-body"></div>
+      <div class="comment-actions">
+        <button class="secondary" data-action="edit">수정</button>
+        <button class="danger" data-action="delete">삭제</button>
+      </div>
+    `;
+    item.querySelector('.c-author').textContent = c.author;
+    item.querySelector('.c-date').textContent = fmt(c.createdAt);
+    item.querySelector('.comment-body').textContent = c.content;
+
+    item.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+      if (!confirm('댓글을 삭제하시겠습니까?')) return;
+      await api.deleteComment(c.id);
+      renderComments();
+    });
+
+    item.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      const body = item.querySelector('.comment-body');
+      body.innerHTML = `
+        <textarea id="edit-c-${c.id}" rows="2"></textarea>
+        <div class="row" style="margin-top:6px;">
+          <button data-action="save">저장</button>
+          <button class="secondary" data-action="cancel">취소</button>
+        </div>
+      `;
+      body.querySelector(`#edit-c-${c.id}`).value = c.content;
+      body.querySelector('[data-action="cancel"]').addEventListener('click', renderComments);
+      body.querySelector('[data-action="save"]').addEventListener('click', async () => {
+        const content = body.querySelector(`#edit-c-${c.id}`).value.trim();
+        const res = await api.updateComment(c.id, { content });
+        if (res.ok) renderComments();
+      });
+    });
+
+    list.appendChild(item);
+  });
+}
+
+el('comment-submit').addEventListener('click', async () => {
+  const author = el('comment-author').value.trim();
+  const content = el('comment-content').value.trim();
+  const errBox = el('comment-error');
+  errBox.hidden = true;
+
+  const res = await api.createComment(currentPostId, { author, content });
+  if (res.ok) {
+    el('comment-author').value = '';
+    el('comment-content').value = '';
+    renderComments();
+  } else {
+    errBox.textContent = await readError(res, '댓글 등록에 실패했습니다.');
+    errBox.hidden = false;
+  }
+});
+
+loadList();
+</script>
+</body>
+</html>
