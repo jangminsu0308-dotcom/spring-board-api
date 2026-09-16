@@ -75,12 +75,26 @@ class PostControllerTest {
     @Test
     void 게시글_목록_조회() throws Exception {
         PostDto.Response response = new PostDto.Response(1L, "제목", "내용", "writer", LocalDateTime.now(), LocalDateTime.now());
-        when(postService.findAll()).thenReturn(List.of(response));
+        PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(response), 0, 10, 1, 1);
+        when(postService.findAll(0, 10, null)).thenReturn(pageResponse);
 
         mockMvc.perform(get("/api/posts"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void 게시글_목록_조회시_page_size_keyword를_그대로_전달한다() throws Exception {
+        PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(), 2, 5, 0, 0);
+        when(postService.findAll(2, 5, "제목")).thenReturn(pageResponse);
+
+        mockMvc.perform(get("/api/posts").param("page", "2").param("size", "5").param("keyword", "제목"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(2))
+                .andExpect(jsonPath("$.size").value(5));
+
+        verify(postService).findAll(2, 5, "제목");
     }
 
     @Test

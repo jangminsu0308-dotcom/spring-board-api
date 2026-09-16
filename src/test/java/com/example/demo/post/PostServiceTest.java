@@ -8,6 +8,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -17,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,13 +63,28 @@ class PostServiceTest {
     }
 
     @Test
-    void findAll_전체_게시글을_응답으로_변환해_반환한다() {
-        when(postRepository.findAll()).thenReturn(List.of(post));
+    void findAll_키워드가_없으면_전체_목록을_페이지로_반환한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        List<PostDto.Response> result = postService.findAll();
+        PostDto.PageResponse result = postService.findAll(0, 10, null);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).id()).isEqualTo(1L);
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).id()).isEqualTo(1L);
+        assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.page()).isEqualTo(0);
+    }
+
+    @Test
+    void findAll_키워드가_있으면_제목으로_검색한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.findByTitleContainingIgnoreCase(eq("제목"), any(Pageable.class))).thenReturn(page);
+
+        PostDto.PageResponse result = postService.findAll(0, 10, "제목");
+
+        assertThat(result.content()).hasSize(1);
+        verify(postRepository).findByTitleContainingIgnoreCase(eq("제목"), any(Pageable.class));
+        verify(postRepository, never()).findAll(any(Pageable.class));
     }
 
     @Test

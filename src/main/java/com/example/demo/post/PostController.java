@@ -5,7 +5,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
-import java.util.List;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,10 +24,13 @@ public class PostController {
         return ResponseEntity.created(URI.create("/api/posts/" + response.id())).body(response);
     }
 
-    @Operation (summary = "게시글 목록 조회")
+    @Operation(summary = "게시글 목록 조회", description = "page(0부터), size, keyword(제목 검색)로 조회합니다.")
     @GetMapping
-    public List<PostDto.Response> findAll() {
-        return postService.findAll();
+    public PostDto.PageResponse findAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
+        return postService.findAll(page, size, keyword);
     }
 
     @Operation(summary = "게시글 단건 조회")

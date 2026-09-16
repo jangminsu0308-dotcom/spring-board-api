@@ -93,6 +93,14 @@
   .auth-bar { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-bottom: 16px; }
   .auth-bar .who { color: var(--muted); margin-right: auto; }
   .auth-bar button { padding: 6px 12px; font-size: 0.82rem; }
+
+  .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .search-bar input { margin-bottom: 0; }
+  .search-bar button { flex-shrink: 0; padding: 8px 16px; }
+
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; font-size: 0.85rem; }
+  .pagination .page-info { color: var(--muted); }
+  .pagination button { padding: 6px 14px; }
 </style>
 </head>
 <body>
@@ -147,7 +155,17 @@
 
   <!-- 목록 화면 -->
   <div id="view-list">
+    <div class="search-bar">
+      <input id="search-keyword" placeholder="제목으로 검색">
+      <button class="secondary" id="search-submit">검색</button>
+      <button class="secondary" id="search-clear" hidden>초기화</button>
+    </div>
     <div id="post-list"></div>
+    <div class="pagination" id="pagination" hidden>
+      <button class="secondary" id="page-prev">← 이전</button>
+      <span class="page-info" id="page-info"></span>
+      <button class="secondary" id="page-next">다음 →</button>
+    </div>
   </div>
 
   <!-- 상세 화면 -->
@@ -185,7 +203,11 @@ function authHeaders() {
 }
 
 const api = {
-  posts: () => fetch('/api/posts').then(r => r.json()),
+  posts: (page, size, keyword) => {
+    const params = new URLSearchParams({ page, size });
+    if (keyword) params.set('keyword', keyword);
+    return fetch(`/api/posts?${params}`).then(r => r.json());
+  },
   post: (id) => fetch(`/api/posts/${id}`).then(r => r.json()),
   createPost: (body) => fetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
   updatePost: (id, body) => fetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
@@ -200,6 +222,9 @@ const api = {
 
 const el = (id) => document.getElementById(id);
 let currentPostId = null;
+const PAGE_SIZE = 10;
+let currentPage = 0;
+let currentKeyword = '';
 
 function fmt(dateStr) {
   if (!dateStr) return '';
@@ -284,20 +309,24 @@ el('btn-logout').addEventListener('click', () => {
 renderAuthBar();
 
 // ---------- 목록 화면 ----------
-async function loadList() {
+async function loadList(page = currentPage) {
   el('view-detail').hidden = true;
   el('view-list').hidden = false;
   const list = el('post-list');
+  const pagination = el('pagination');
   list.innerHTML = '<div class="empty">불러오는 중...</div>';
+  pagination.hidden = true;
 
   try {
-    const posts = await api.posts();
-    if (posts.length === 0) {
-      list.innerHTML = '<div class="empty">아직 게시글이 없습니다.</div>';
+    const result = await api.posts(page, PAGE_SIZE, currentKeyword);
+    currentPage = result.page;
+
+    if (result.content.length === 0) {
+      list.innerHTML = `<div class="empty">${currentKeyword ? '검색 결과가 없습니다.' : '아직 게시글이 없습니다.'}</div>`;
       return;
     }
     list.innerHTML = '';
-    posts.slice().reverse().forEach(post => {
+    result.content.forEach(post => {
       const item = document.createElement('div');
       item.className = 'card post-item';
       item.innerHTML = `
@@ -311,10 +340,34 @@ async function loadList() {
       item.addEventListener('click', () => openDetail(post.id));
       list.appendChild(item);
     });
+
+    if (result.totalPages > 1) {
+      pagination.hidden = false;
+      el('page-info').textContent = `${result.page + 1} / ${result.totalPages} 페이지 (총 ${result.totalElements}건)`;
+      el('page-prev').disabled = result.page === 0;
+      el('page-next').disabled = result.page >= result.totalPages - 1;
+    }
   } catch (e) {
     list.innerHTML = '<div class="error">목록을 불러오지 못했습니다.</div>';
   }
 }
+
+el('search-submit').addEventListener('click', () => {
+  currentKeyword = el('search-keyword').value.trim();
+  el('search-clear').hidden = !currentKeyword;
+  loadList(0);
+});
+el('search-keyword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') el('search-submit').click();
+});
+el('search-clear').addEventListener('click', () => {
+  currentKeyword = '';
+  el('search-keyword').value = '';
+  el('search-clear').hidden = true;
+  loadList(0);
+});
+el('page-prev').addEventListener('click', () => loadList(currentPage - 1));
+el('page-next').addEventListener('click', () => loadList(currentPage + 1));
 
 // ---------- 새 글 작성 ----------
 el('btn-new-post').addEventListener('click', () => {
@@ -340,7 +393,7 @@ el('new-post-submit').addEventListener('click', async () => {
   const res = await api.createPost({ title, content });
   if (res.ok) {
     el('new-post-form').hidden = true;
-    loadList();
+    loadList(0);
   } else {
     errBox.textContent = await readError(res, '등록에 실패했습니다.');
     errBox.hidden = false;

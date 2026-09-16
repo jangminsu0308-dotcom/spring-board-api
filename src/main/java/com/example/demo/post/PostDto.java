@@ -1,8 +1,10 @@
 package com.example.demo.post;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import org.springframework.data.domain.Page;
 
 public class PostDto {
 
@@ -31,6 +33,24 @@ public class PostDto {
 			post.getAuthor().getUsername(),
 			post.getCreatedAt(),
 			post.getUpdatedAt()
+			);
+		}
+	}
+
+	public record PageResponse(
+		List<Response> content,
+		int page,
+		int size,
+		long totalElements,
+		int totalPages
+	) {
+		static PageResponse from(Page<Post> page) {
+			return new PageResponse(
+				page.getContent().stream().map(Response::from).toList(),
+				page.getNumber(),
+				page.getSize(),
+				page.getTotalElements(),
+				page.getTotalPages()
 			);
 		}
 	}

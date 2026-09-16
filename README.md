@@ -34,7 +34,7 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | POST | `/api/auth/register` | 회원가입 | - | 201 |
 | POST | `/api/auth/login` | 로그인 (JWT 발급) | - | 200 |
 | POST | `/api/posts` | 게시글 생성 | 필요 | 201 + Location |
-| GET | `/api/posts` | 목록 조회 | - | 200 |
+| GET | `/api/posts` | 목록 조회 (페이징·검색) | - | 200 |
 | GET | `/api/posts/{id}` | 단건 조회 | - | 200 |
 | PUT | `/api/posts/{id}` | 수정 (본인 글만) | 필요 | 200 |
 | DELETE | `/api/posts/{id}` | 삭제 (본인 글만) | 필요 | 204 |
@@ -44,6 +44,28 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | DELETE | `/api/comments/{commentId}` | 댓글 삭제 (본인 댓글만) | 필요 | 204 |
 
 인증이 필요한 요청은 `Authorization: Bearer {token}` 헤더에 로그인으로 발급받은 JWT를 담아 보냅니다.
+
+**게시글 목록 조회 파라미터**
+
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `page` | 0 | 페이지 번호 (0부터 시작) |
+| `size` | 10 | 페이지당 개수 (최대 100) |
+| `keyword` | - | 제목 검색어 (대소문자 무시, 부분 일치) |
+
+```
+GET /api/posts?page=0&size=10&keyword=스프링
+```
+
+```json
+{
+  "content": [ { "id": 5, "title": "...", "...": "..." } ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 23,
+  "totalPages": 3
+}
+```
 
 ## API 문서
 

@@ -3,10 +3,13 @@ package com.example.demo.post;
 import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -23,10 +26,19 @@ public class PostService {
 		return PostDto.Response.from(postRepository.save(post));
 	}
 
-	public List<PostDto.Response> findAll() {
-		return postRepository.findAll().stream()
-		.map(PostDto.Response::from)
-		.toList();
+	private static final int MAX_PAGE_SIZE = 100;
+
+	public PostDto.PageResponse findAll(int page, int size, String keyword) {
+		Pageable pageable = PageRequest.of(
+				Math.max(page, 0),
+				Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
+				Sort.by(Sort.Direction.DESC, "id"));
+
+		Page<Post> result = (keyword == null || keyword.isBlank())
+				? postRepository.findAll(pageable)
+				: postRepository.findByTitleContainingIgnoreCase(keyword, pageable);
+
+		return PostDto.PageResponse.from(result);
 	}
 
 	public PostDto.Response findById(Long id) {
