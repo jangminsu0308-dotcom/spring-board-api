@@ -2,7 +2,9 @@ package com.example.demo.post;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import org.springframework.data.domain.Page;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class CommentDto {
 
@@ -30,6 +32,24 @@ public class CommentDto {
                 comment.getContent(),
                 comment.getAuthor().getUsername(),
                 comment.getCreatedAt()
+            );
+        }
+    }
+
+    public record PageResponse(
+        List<Response> content,
+        int page,
+        int size,
+        long totalElements,
+        int totalPages
+    ) {
+        static PageResponse from(Page<Comment> page) {
+            return new PageResponse(
+                page.getContent().stream().map(Response::from).toList(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages()
             );
         }
     }

@@ -8,6 +8,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -17,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -73,21 +78,23 @@ class CommentServiceTest {
     }
 
     @Test
-    void findByPost_게시글이_존재하면_댓글_목록을_반환한다() {
+    void findByPost_게시글이_존재하면_댓글_페이지를_반환한다() {
         when(postRepository.existsById(1L)).thenReturn(true);
-        when(commentRepository.findByPostIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(comment));
+        Page<Comment> page = new PageImpl<>(List.of(comment), PageRequest.of(0, 10), 1);
+        when(commentRepository.findByPostIdOrderByCreatedAtAsc(eq(1L), any(Pageable.class))).thenReturn(page);
 
-        List<CommentDto.Response> result = commentService.findByPost(1L);
+        CommentDto.PageResponse result = commentService.findByPost(1L, 0, 10);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).id()).isEqualTo(10L);
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).id()).isEqualTo(10L);
+        assertThat(result.totalElements()).isEqualTo(1);
     }
 
     @Test
     void findByPost_게시글이_없으면_예외를_던진다() {
         when(postRepository.existsById(999L)).thenReturn(false);
 
-        assertThatThrownBy(() -> commentService.findByPost(999L))
+        assertThatThrownBy(() -> commentService.findByPost(999L, 0, 10))
                 .isInstanceOf(PostNotFoundException.class);
     }
 

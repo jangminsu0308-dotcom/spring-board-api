@@ -73,16 +73,18 @@ class CommentControllerTest {
     @Test
     void 게시글의_댓글_목록_조회() throws Exception {
         CommentDto.Response response = new CommentDto.Response(1L, "댓글", "writer", LocalDateTime.now());
-        when(commentService.findByPost(1L)).thenReturn(List.of(response));
+        CommentDto.PageResponse pageResponse = new CommentDto.PageResponse(List.of(response), 0, 10, 1, 1);
+        when(commentService.findByPost(1L, 0, 10)).thenReturn(pageResponse);
 
         mockMvc.perform(get("/api/posts/1/comments"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
     void 존재하지_않는_게시글의_댓글_조회시_404를_반환한다() throws Exception {
-        when(commentService.findByPost(999L)).thenThrow(new PostNotFoundException(999L));
+        when(commentService.findByPost(999L, 0, 10)).thenThrow(new PostNotFoundException(999L));
 
         mockMvc.perform(get("/api/posts/999/comments"))
                 .andExpect(status().isNotFound());

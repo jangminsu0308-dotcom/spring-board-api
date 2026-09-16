@@ -41,7 +41,7 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | PUT | `/api/posts/{id}` | 수정 (본인 글만) | 필요 | 200 |
 | DELETE | `/api/posts/{id}` | 삭제 (본인 글만) | 필요 | 204 |
 | POST | `/api/posts/{postId}/comments` | 댓글 작성 | 필요 | 201 + Location |
-| GET | `/api/posts/{postId}/comments` | 게시글의 댓글 목록 조회 | - | 200 |
+| GET | `/api/posts/{postId}/comments` | 게시글의 댓글 목록 조회 (페이징) | - | 200 |
 | PUT | `/api/comments/{commentId}` | 댓글 수정 (본인 댓글만) | 필요 | 200 |
 | DELETE | `/api/comments/{commentId}` | 댓글 삭제 (본인 댓글만) | 필요 | 204 |
 
@@ -77,6 +77,11 @@ GET /api/posts?page=0&size=10&keyword=스프링
   "totalElements": 23,
   "totalPages": 3
 }
+```
+
+**댓글 목록 조회**도 같은 형식으로 페이징됩니다 (`page`/`size`, 기본 10개, 작성순 정렬). 검색어는 없습니다.
+```
+GET /api/posts/{postId}/comments?page=0&size=10
 ```
 
 ## API 문서

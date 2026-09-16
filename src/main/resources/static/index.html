@@ -176,6 +176,7 @@
 
     <div class="comments-heading">댓글</div>
     <div id="comment-list"></div>
+    <button class="secondary" id="comment-load-more" hidden style="width:100%; margin-bottom:12px;">댓글 더 보기</button>
 
     <div class="card">
       <textarea id="comment-content" placeholder="댓글 내용" rows="2"></textarea>
@@ -249,7 +250,7 @@ const api = {
   createPost: (body) => authFetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   updatePost: (id, body) => authFetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   deletePost: (id) => authFetch(`/api/posts/${id}`, { method: 'DELETE' }),
-  comments: (postId) => fetch(`/api/posts/${postId}/comments`).then(r => r.json()),
+  comments: (postId, page, size) => fetch(`/api/posts/${postId}/comments?page=${page}&size=${size}`).then(r => r.json()),
   createComment: (postId, body) => authFetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   updateComment: (id, body) => authFetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   deleteComment: (id) => authFetch(`/api/comments/${id}`, { method: 'DELETE' }),
@@ -511,69 +512,98 @@ async function renderDetail() {
 }
 
 // ---------- 댓글 ----------
-async function renderComments() {
-  const list = el('comment-list');
-  list.innerHTML = '<div class="empty">불러오는 중...</div>';
-  const comments = await api.comments(currentPostId);
+// 댓글은 작성순(오래된 것부터) 정렬이라, "더 보기"를 누를수록 최신 댓글 쪽으로 내려간다.
+// 그래서 수정/삭제/새 댓글 작성은 전체를 다시 불러오지 않고, 화면에서 바로 반영한다.
+const COMMENT_PAGE_SIZE = 10;
+let commentPage = 0;
 
-  if (comments.length === 0) {
-    list.innerHTML = '<div class="empty">첫 댓글을 남겨보세요.</div>';
-    return;
-  }
-  list.innerHTML = '';
-  comments.forEach(c => {
-    const item = document.createElement('div');
-    item.className = 'comment';
-    item.innerHTML = `
-      <div class="comment-head">
-        <span class="c-author"></span>
-        <span class="c-date"></span>
-      </div>
-      <div class="comment-body"></div>
-      <div class="comment-actions">
-        <button class="secondary" data-action="edit">수정</button>
-        <button class="danger" data-action="delete">삭제</button>
+function buildCommentItem(c) {
+  const item = document.createElement('div');
+  item.className = 'comment';
+  item.innerHTML = `
+    <div class="comment-head">
+      <span class="c-author"></span>
+      <span class="c-date"></span>
+    </div>
+    <div class="comment-body"></div>
+    <div class="comment-actions">
+      <button class="secondary" data-action="edit">수정</button>
+      <button class="danger" data-action="delete">삭제</button>
+    </div>
+  `;
+  item.querySelector('.c-author').textContent = c.author;
+  item.querySelector('.c-date').textContent = fmt(c.createdAt);
+  item.querySelector('.comment-body').textContent = c.content;
+
+  const isOwner = getUsername() === c.author;
+  item.querySelector('[data-action="edit"]').hidden = !isOwner;
+  item.querySelector('[data-action="delete"]').hidden = !isOwner;
+
+  item.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+    const res = await api.deleteComment(c.id);
+    if (res.ok) {
+      item.remove();
+      if (!el('comment-list').children.length) {
+        el('comment-list').innerHTML = '<div class="empty">첫 댓글을 남겨보세요.</div>';
+      }
+    } else {
+      alert(await readError(res, '삭제에 실패했습니다.'));
+    }
+  });
+
+  item.querySelector('[data-action="edit"]').addEventListener('click', () => {
+    const body = item.querySelector('.comment-body');
+    body.innerHTML = `
+      <textarea id="edit-c-${c.id}" rows="2"></textarea>
+      <div class="row" style="margin-top:6px;">
+        <button data-action="save">저장</button>
+        <button class="secondary" data-action="cancel">취소</button>
       </div>
     `;
-    item.querySelector('.c-author').textContent = c.author;
-    item.querySelector('.c-date').textContent = fmt(c.createdAt);
-    item.querySelector('.comment-body').textContent = c.content;
-
-    const isOwner = getUsername() === c.author;
-    item.querySelector('[data-action="edit"]').hidden = !isOwner;
-    item.querySelector('[data-action="delete"]').hidden = !isOwner;
-
-    item.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-      if (!confirm('댓글을 삭제하시겠습니까?')) return;
-      const res = await api.deleteComment(c.id);
+    body.querySelector(`#edit-c-${c.id}`).value = c.content;
+    body.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+      body.textContent = c.content;
+    });
+    body.querySelector('[data-action="save"]').addEventListener('click', async () => {
+      const content = body.querySelector(`#edit-c-${c.id}`).value.trim();
+      const res = await api.updateComment(c.id, { content });
       if (res.ok) {
-        renderComments();
+        c.content = content;
+        body.textContent = content;
       } else {
-        alert(await readError(res, '삭제에 실패했습니다.'));
+        alert(await readError(res, '수정에 실패했습니다.'));
       }
     });
-
-    item.querySelector('[data-action="edit"]').addEventListener('click', () => {
-      const body = item.querySelector('.comment-body');
-      body.innerHTML = `
-        <textarea id="edit-c-${c.id}" rows="2"></textarea>
-        <div class="row" style="margin-top:6px;">
-          <button data-action="save">저장</button>
-          <button class="secondary" data-action="cancel">취소</button>
-        </div>
-      `;
-      body.querySelector(`#edit-c-${c.id}`).value = c.content;
-      body.querySelector('[data-action="cancel"]').addEventListener('click', renderComments);
-      body.querySelector('[data-action="save"]').addEventListener('click', async () => {
-        const content = body.querySelector(`#edit-c-${c.id}`).value.trim();
-        const res = await api.updateComment(c.id, { content });
-        if (res.ok) renderComments();
-      });
-    });
-
-    list.appendChild(item);
   });
+
+  return item;
 }
+
+async function renderComments() {
+  commentPage = 0;
+  const list = el('comment-list');
+  const loadMoreBtn = el('comment-load-more');
+  list.innerHTML = '<div class="empty">불러오는 중...</div>';
+  loadMoreBtn.hidden = true;
+
+  const result = await api.comments(currentPostId, commentPage, COMMENT_PAGE_SIZE);
+
+  list.innerHTML = '';
+  if (result.content.length === 0) {
+    list.innerHTML = '<div class="empty">첫 댓글을 남겨보세요.</div>';
+  } else {
+    result.content.forEach(c => list.appendChild(buildCommentItem(c)));
+  }
+  loadMoreBtn.hidden = commentPage + 1 >= result.totalPages;
+}
+
+el('comment-load-more').addEventListener('click', async () => {
+  commentPage++;
+  const result = await api.comments(currentPostId, commentPage, COMMENT_PAGE_SIZE);
+  result.content.forEach(c => el('comment-list').appendChild(buildCommentItem(c)));
+  el('comment-load-more').hidden = commentPage + 1 >= result.totalPages;
+});
 
 el('comment-submit').addEventListener('click', async () => {
   if (!getUsername()) {
@@ -587,8 +617,11 @@ el('comment-submit').addEventListener('click', async () => {
 
   const res = await api.createComment(currentPostId, { content });
   if (res.ok) {
+    const created = await res.json();
     el('comment-content').value = '';
-    renderComments();
+    const list = el('comment-list');
+    if (list.querySelector('.empty')) list.innerHTML = '';
+    list.appendChild(buildCommentItem(created));
   } else {
     errBox.textContent = await readError(res, '댓글 등록에 실패했습니다.');
     errBox.hidden = false;

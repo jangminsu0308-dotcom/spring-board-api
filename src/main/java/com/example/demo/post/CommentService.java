@@ -3,10 +3,13 @@ package com.example.demo.post;
 import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -26,13 +29,18 @@ public class CommentService {
         return CommentDto.Response.from(commentRepository.save(comment));
     }
 
-    public List<CommentDto.Response> findByPost(Long postId) {
+    private static final int MAX_PAGE_SIZE = 100;
+
+    public CommentDto.PageResponse findByPost(Long postId, int page, int size) {
         if (!postRepository.existsById(postId)) {
             throw new PostNotFoundException(postId);
         }
-        return commentRepository.findByPostIdOrderByCreatedAtAsc(postId).stream()
-                .map(CommentDto.Response::from)
-                .toList();
+        Pageable pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
+                Sort.by(Sort.Direction.ASC, "createdAt"));
+        Page<Comment> result = commentRepository.findByPostIdOrderByCreatedAtAsc(postId, pageable);
+        return CommentDto.PageResponse.from(result);
     }
 
     @Transactional
