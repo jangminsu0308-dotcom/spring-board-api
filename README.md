@@ -172,8 +172,11 @@ com.example.demo
 |---|---|---|
 | Service 단위 테스트 | `PostServiceTest`, `CommentServiceTest`, `AuthServiceTest` | Mockito로 Repository를 목킹, DB 없이 비즈니스 로직만 검증 |
 | Controller 슬라이스 테스트 | `PostControllerTest`, `CommentControllerTest`, `AuthControllerTest` | `@WebMvcTest` + MockMvc, Service를 목킹해 요청/응답·검증·예외 처리(401/403/404/400)를 검증 |
+| Repository 통합 테스트 | `PostRepositoryTest`, `CommentRepositoryTest` | `@DataJpaTest`로 실제 DB에 커스텀 쿼리(제목 대소문자 무시 검색, 댓글 작성순 정렬)를 실행해 검증 |
 
 정상 케이스뿐 아니라 존재하지 않는 리소스 조회·수정·삭제 시 예외가 올바르게 던져지는지, 잘못된 입력이 400으로 막히는지, 인증 없는 요청이 401로 막히는지, 본인 소유가 아닌 글/댓글 수정·삭제가 403으로 막히는지까지 함께 검증합니다.
+
+**Repository 테스트는 H2가 아닌 실제 MySQL을 그대로 사용**합니다 (`@AutoConfigureTestDatabase(replace = Replace.NONE)`). `LIKE` 대소문자 처리 등은 DB/컬레이션마다 동작이 달라서, 배포 환경과 다른 임베디드 DB로 통과시켜봐야 신뢰할 수 없기 때문입니다. 로컬 개발 DB를 그대로 쓰지만 `@DataJpaTest`가 각 테스트를 트랜잭션으로 감싸 종료 시 롤백하므로 실제 데이터는 남지 않습니다.
 
 ## 실행 방법
 
