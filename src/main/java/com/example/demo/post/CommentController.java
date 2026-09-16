@@ -1,6 +1,7 @@
 package com.example.demo.post;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.List;
+
+import static com.example.demo.common.OpenApiConfig.BEARER_AUTH;
 
 @Tag(name = "댓글", description = "댓글 CRUD API")
 @RestController
@@ -19,6 +22,7 @@ public class CommentController {
     private final CommentService commentService;
 
     @Operation(summary = "댓글 작성", description = "로그인이 필요합니다.")
+    @SecurityRequirement(name = BEARER_AUTH)
     @PostMapping("/posts/{postId}/comments")
     public ResponseEntity<CommentDto.Response> create(
             @PathVariable Long postId,
@@ -35,6 +39,7 @@ public class CommentController {
     }
 
     @Operation(summary = "댓글 수정", description = "본인이 작성한 댓글만 수정할 수 있습니다.")
+    @SecurityRequirement(name = BEARER_AUTH)
     @PutMapping("/comments/{commentId}")
     public CommentDto.Response update(
             @PathVariable Long commentId,
@@ -44,6 +49,7 @@ public class CommentController {
     }
 
     @Operation(summary = "댓글 삭제", description = "본인이 작성한 댓글만 삭제할 수 있습니다.")
+    @SecurityRequirement(name = BEARER_AUTH)
     @DeleteMapping("/comments/{commentId}")
     public ResponseEntity<Void> delete(@PathVariable Long commentId, Authentication authentication) {
         commentService.delete(commentId, authentication.getName());

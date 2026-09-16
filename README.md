@@ -87,6 +87,8 @@ Swagger UI로 API 명세 확인 및 직접 테스트 가능
 http://192.168.1.72/swagger-ui.html
 ```
 
+우측 상단 **Authorize** 버튼에 `/api/auth/login`으로 받은 `accessToken`을 넣으면, 인증이 필요한 API(자물쇠 아이콘 표시)도 Swagger UI에서 바로 테스트할 수 있습니다.
+
 ### 에러 응답
 
 모든 예외를 `@RestControllerAdvice`에서 처리해 형식을 통일했습니다.
