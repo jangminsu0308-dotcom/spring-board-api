@@ -441,7 +441,9 @@ el('new-post-submit').addEventListener('click', async () => {
 });
 
 // ---------- 상세 화면 ----------
-el('btn-back').addEventListener('click', loadList);
+// loadList를 addEventListener에 직접 넘기면 클릭 이벤트 객체가 page 인자로 들어가버린다
+// (loadList(page = currentPage)의 기본값이 무시됨) — 인자 없이 감싸서 호출한다.
+el('btn-back').addEventListener('click', () => loadList());
 
 async function openDetail(id) {
   currentPostId = id;
