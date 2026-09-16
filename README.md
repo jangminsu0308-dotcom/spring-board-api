@@ -212,6 +212,24 @@ CREATE USER 'springuser'@'localhost' IDENTIFIED BY '비밀번호';
 GRANT ALL PRIVILEGES ON springdb.* TO 'springuser'@'localhost';
 ```
 
+테이블은 직접 만들 필요 없습니다 — 앱을 처음 띄우면 Flyway가 `src/main/resources/db/migration`의 마이그레이션을 실행해 스키마를 만듭니다.
+
+## 스키마 관리 (Flyway)
+
+원래는 `spring.jpa.hibernate.ddl-auto=update`로 Hibernate가 스키마를 알아서 맞추게 했습니다. 문제는 이 방식이
+**새 컬럼은 추가해도 안 쓰는 옛날 컬럼은 절대 안 지운다**는 것입니다. `Comment.author`를 문자열에서 `User`
+연관관계로 바꿨을 때, 운영 DB에는 옛날 `author` 컬럼이 `NOT NULL`로 그대로 남아 댓글 작성이 500으로 막히는
+사고가 실제로 있었습니다 — 로컬은 우연히 문제없었지만 운영은 아니었던, 전형적인 환경별 스키마 드리프트입니다.
+
+지금은 `db/migration/V1__init.sql`로 스키마를 버전 관리하고, `spring.jpa.hibernate.ddl-auto=validate`로
+바꿔서 **엔티티와 실제 DB 스키마가 다르면 앱이 아예 기동하지 않도록** 했습니다. 조용히 어긋나는 대신 시끄럽게
+실패하는 쪽을 택한 것입니다.
+
+기존에 `ddl-auto=update`로 이미 만들어져 있던 로컬/운영 DB는 `spring.flyway.baseline-on-migrate=true`
+덕분에 "이미 V1까지 적용됨"으로 표시만 되고 마이그레이션이 실제로 실행되지는 않습니다. 반대로 CI처럼
+완전히 빈 DB에서는 `V1__init.sql`이 그대로 실행되어 지금 엔티티가 기대하는 스키마를 처음부터 만듭니다.
+앞으로 스키마를 바꿀 땐 `V2__xxx.sql`처럼 새 마이그레이션 파일을 추가하는 방식으로 진행합니다.
+
 ## 설계 시 고려한 점
 
 **Entity에 Setter를 두지 않음**

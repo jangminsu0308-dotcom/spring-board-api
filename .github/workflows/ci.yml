@@ -42,7 +42,7 @@ jobs:
           SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/springdb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
           SPRING_DATASOURCE_USERNAME: springuser
           SPRING_DATASOURCE_PASSWORD: springpass
-          SPRING_JPA_HIBERNATE_DDL_AUTO: update
+          SPRING_JPA_HIBERNATE_DDL_AUTO: validate
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION_MS: 3600000
           JWT_REFRESH_EXPIRATION_MS: 604800000
