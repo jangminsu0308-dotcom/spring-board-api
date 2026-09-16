@@ -45,6 +45,7 @@ jobs:
           SPRING_JPA_HIBERNATE_DDL_AUTO: update
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION_MS: 3600000
+          JWT_REFRESH_EXPIRATION_MS: 604800000
         run: ./mvnw test
 
       - name: 테스트 리포트 업로드 (실패 시 확인용)

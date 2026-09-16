@@ -6,12 +6,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -24,13 +28,39 @@ public class AuthService {
         userRepository.save(user);
     }
 
+    @Transactional
     public AuthDto.TokenResponse login(AuthDto.LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(InvalidCredentialsException::new);
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             throw new InvalidCredentialsException();
         }
-        String token = jwtTokenProvider.createToken(user.getUsername());
-        return new AuthDto.TokenResponse(token, user.getUsername());
+        return issueTokens(user);
+    }
+
+    /** 액세스 토큰이 만료됐을 때, 리프레시 토큰으로 재로그인 없이 새 토큰 쌍을 발급한다. 사용된 리프레시 토큰은 즉시 폐기(회전)한다. */
+    @Transactional
+    public AuthDto.TokenResponse refresh(AuthDto.RefreshRequest request) {
+        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.refreshToken())
+                .orElseThrow(InvalidRefreshTokenException::new);
+        if (!refreshToken.isUsable()) {
+            throw new InvalidRefreshTokenException();
+        }
+        refreshToken.revoke();
+        return issueTokens(refreshToken.getUser());
+    }
+
+    @Transactional
+    public void logout(AuthDto.LogoutRequest request) {
+        refreshTokenRepository.findByToken(request.refreshToken())
+                .ifPresent(RefreshToken::revoke);
+    }
+
+    private AuthDto.TokenResponse issueTokens(User user) {
+        String accessToken = jwtTokenProvider.createAccessToken(user.getUsername());
+        String refreshTokenValue = jwtTokenProvider.generateRefreshToken();
+        LocalDateTime expiresAt = LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshValidityMs()));
+        refreshTokenRepository.save(new RefreshToken(refreshTokenValue, user, expiresAt));
+        return new AuthDto.TokenResponse(accessToken, refreshTokenValue, user.getUsername());
     }
 }

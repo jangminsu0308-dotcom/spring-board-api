@@ -187,19 +187,56 @@
 
 <script>
 // ---------- 인증 상태 ----------
-function getToken() { return localStorage.getItem('token'); }
+function getAccessToken() { return localStorage.getItem('accessToken'); }
+function getRefreshToken() { return localStorage.getItem('refreshToken'); }
 function getUsername() { return localStorage.getItem('username'); }
-function setAuth(token, username) {
-  localStorage.setItem('token', token);
+function setAuth(accessToken, refreshToken, username) {
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('refreshToken', refreshToken);
   localStorage.setItem('username', username);
 }
 function clearAuth() {
-  localStorage.removeItem('token');
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
   localStorage.removeItem('username');
 }
 function authHeaders() {
-  const token = getToken();
+  const token = getAccessToken();
   return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
+// 리프레시 토큰으로 액세스 토큰을 재발급받는다. 실패하면(리프레시 토큰도 만료) 로그아웃 상태로 되돌린다.
+async function tryRefreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
+  const res = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!res.ok) {
+    clearAuth();
+    return false;
+  }
+  const data = await res.json();
+  setAuth(data.accessToken, data.refreshToken, data.username);
+  return true;
+}
+
+// 인증이 필요한 요청 전용: 액세스 토큰이 만료(401)되면 리프레시 토큰으로 한 번 재시도한다.
+async function authFetch(url, options = {}) {
+  const doFetch = () => fetch(url, { ...options, headers: { ...(options.headers || {}), ...authHeaders() } });
+
+  let res = await doFetch();
+  if (res.status === 401 && getRefreshToken()) {
+    if (await tryRefreshAccessToken()) {
+      res = await doFetch();
+    } else {
+      renderAuthBar();
+    }
+  }
+  return res;
 }
 
 const api = {
@@ -209,15 +246,16 @@ const api = {
     return fetch(`/api/posts?${params}`).then(r => r.json());
   },
   post: (id) => fetch(`/api/posts/${id}`).then(r => r.json()),
-  createPost: (body) => fetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
-  updatePost: (id, body) => fetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
-  deletePost: (id) => fetch(`/api/posts/${id}`, { method: 'DELETE', headers: authHeaders() }),
+  createPost: (body) => authFetch('/api/posts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  updatePost: (id, body) => authFetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  deletePost: (id) => authFetch(`/api/posts/${id}`, { method: 'DELETE' }),
   comments: (postId) => fetch(`/api/posts/${postId}/comments`).then(r => r.json()),
-  createComment: (postId, body) => fetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
-  updateComment: (id, body) => fetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) }),
-  deleteComment: (id) => fetch(`/api/comments/${id}`, { method: 'DELETE', headers: authHeaders() }),
+  createComment: (postId, body) => authFetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  updateComment: (id, body) => authFetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  deleteComment: (id) => authFetch(`/api/comments/${id}`, { method: 'DELETE' }),
   register: (body) => fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   login: (body) => fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  logout: (refreshToken) => fetch('/api/auth/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken }) }),
 };
 
 const el = (id) => document.getElementById(id);
@@ -267,7 +305,7 @@ el('login-submit').addEventListener('click', async () => {
   const res = await api.login({ username, password });
   if (res.ok) {
     const data = await res.json();
-    setAuth(data.token, data.username);
+    setAuth(data.accessToken, data.refreshToken, data.username);
     el('login-form').hidden = true;
     renderAuthBar();
   } else {
@@ -301,9 +339,11 @@ el('register-submit').addEventListener('click', async () => {
 });
 
 el('btn-logout').addEventListener('click', () => {
+  const refreshToken = getRefreshToken();
   clearAuth();
   renderAuthBar();
   if (!el('view-detail').hidden) renderDetail();
+  if (refreshToken) api.logout(refreshToken).catch(() => {});
 });
 
 renderAuthBar();
@@ -371,7 +411,7 @@ el('page-next').addEventListener('click', () => loadList(currentPage + 1));
 
 // ---------- 새 글 작성 ----------
 el('btn-new-post').addEventListener('click', () => {
-  if (!getToken()) {
+  if (!getUsername()) {
     alert('로그인이 필요합니다.');
     el('btn-login').click();
     return;
@@ -534,7 +574,7 @@ async function renderComments() {
 }
 
 el('comment-submit').addEventListener('click', async () => {
-  if (!getToken()) {
+  if (!getUsername()) {
     alert('로그인이 필요합니다.');
     el('btn-login').click();
     return;

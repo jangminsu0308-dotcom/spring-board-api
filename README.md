@@ -32,7 +32,9 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | Method | Endpoint | 설명 | 인증 | 성공 응답 |
 |---|---|---|---|---|
 | POST | `/api/auth/register` | 회원가입 | - | 201 |
-| POST | `/api/auth/login` | 로그인 (JWT 발급) | - | 200 |
+| POST | `/api/auth/login` | 로그인 (액세스·리프레시 토큰 발급) | - | 200 |
+| POST | `/api/auth/refresh` | 액세스 토큰 재발급 | - | 200 |
+| POST | `/api/auth/logout` | 리프레시 토큰 폐기 | - | 204 |
 | POST | `/api/posts` | 게시글 생성 | 필요 | 201 + Location |
 | GET | `/api/posts` | 목록 조회 (페이징·검색) | - | 200 |
 | GET | `/api/posts/{id}` | 단건 조회 | - | 200 |
@@ -43,7 +45,17 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | PUT | `/api/comments/{commentId}` | 댓글 수정 (본인 댓글만) | 필요 | 200 |
 | DELETE | `/api/comments/{commentId}` | 댓글 삭제 (본인 댓글만) | 필요 | 204 |
 
-인증이 필요한 요청은 `Authorization: Bearer {token}` 헤더에 로그인으로 발급받은 JWT를 담아 보냅니다.
+인증이 필요한 요청은 `Authorization: Bearer {accessToken}` 헤더에 로그인으로 발급받은 액세스 토큰을 담아 보냅니다.
+
+**로그인 / 재발급 응답**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzUxMiJ9...",
+  "refreshToken": "09a4ddd3-aaf8-46a7-85aa-5071d3162e34",
+  "username": "writer"
+}
+```
 
 **게시글 목록 조회 파라미터**
 
@@ -99,15 +111,18 @@ http://192.168.1.72/swagger-ui.html
 
 ## 인증 방식
 
-JWT 기반 무상태(stateless) 인증입니다.
+JWT 액세스 토큰 + 리프레시 토큰 조합의 무상태(stateless) 인증입니다.
 
 1. `/api/auth/register`로 회원가입 (비밀번호는 BCrypt로 암호화해 저장)
-2. `/api/auth/login`으로 로그인하면 JWT 발급 (기본 만료 1시간)
-3. 이후 요청은 `Authorization: Bearer {token}` 헤더로 인증
-4. 게시글/댓글 작성자는 로그인한 사용자로 서버에서 자동 지정 (요청 본문으로 조작 불가)
-5. 수정/삭제는 작성자 본인만 가능 — 아니면 403
+2. `/api/auth/login`으로 로그인하면 액세스 토큰(기본 만료 1시간)과 리프레시 토큰(기본 만료 7일)을 함께 발급
+3. 이후 요청은 `Authorization: Bearer {accessToken}` 헤더로 인증
+4. 액세스 토큰이 만료되면 `/api/auth/refresh`에 리프레시 토큰을 보내 재로그인 없이 새 토큰 쌍을 재발급 — 프론트엔드는 401을 받으면 이 과정을 자동으로 수행한다
+5. 재발급 시 기존 리프레시 토큰은 즉시 폐기(회전)되어, 탈취된 옛 토큰으로는 더 이상 재발급받을 수 없다
+6. `/api/auth/logout`으로 리프레시 토큰을 직접 폐기 가능
+7. 게시글/댓글 작성자는 로그인한 사용자로 서버에서 자동 지정 (요청 본문으로 조작 불가)
+8. 수정/삭제는 작성자 본인만 가능 — 아니면 403
 
-세션을 서버에 저장하지 않아 서버를 여러 대로 늘려도 문제없는 구조입니다.
+액세스 토큰은 서명 검증만으로 확인하는 기존 JWT 방식 그대로 서버에 상태를 두지 않고, 리프레시 토큰만 `refresh_tokens` 테이블에 저장해 폐기·회전이 가능하도록 했습니다.
 
 ## 패키지 구조
 
@@ -117,13 +132,16 @@ com.example.demo
 ├── auth            # 회원/인증 도메인
 │   ├── User                        # Entity
 │   ├── UserRepository              # Repository
+│   ├── RefreshToken                # Entity (토큰 회전/폐기 상태 보관)
+│   ├── RefreshTokenRepository      # Repository
 │   ├── AuthDto                     # Request / Response
-│   ├── AuthService                 # 회원가입 / 로그인
+│   ├── AuthService                 # 회원가입 / 로그인 / 재발급 / 로그아웃
 │   ├── AuthController              # HTTP 처리
 │   ├── DuplicateUsernameException
-│   └── InvalidCredentialsException
+│   ├── InvalidCredentialsException
+│   └── InvalidRefreshTokenException
 ├── security        # JWT 인증/인가
-│   ├── JwtTokenProvider            # 토큰 발급 / 검증
+│   ├── JwtTokenProvider            # 액세스 토큰 발급/검증, 리프레시 토큰 값 생성
 │   ├── JwtAuthenticationFilter     # 요청마다 토큰 검사 후 SecurityContext 설정
 │   ├── JwtAuthenticationEntryPoint # 인증 실패(401) 응답
 │   └── SecurityConfig              # 엔드포인트별 인증 요구 여부

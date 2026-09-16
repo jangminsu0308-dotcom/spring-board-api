@@ -26,9 +26,22 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @Operation(summary = "로그인", description = "로그인 성공 시 JWT를 발급합니다.")
+    @Operation(summary = "로그인", description = "로그인 성공 시 액세스 토큰과 리프레시 토큰을 발급합니다.")
     @PostMapping("/login")
     public AuthDto.TokenResponse login(@Valid @RequestBody AuthDto.LoginRequest request) {
         return authService.login(request);
+    }
+
+    @Operation(summary = "토큰 재발급", description = "리프레시 토큰으로 액세스 토큰을 재발급합니다. 사용된 리프레시 토큰은 폐기되고 새 토큰이 함께 발급됩니다.")
+    @PostMapping("/refresh")
+    public AuthDto.TokenResponse refresh(@Valid @RequestBody AuthDto.RefreshRequest request) {
+        return authService.refresh(request);
+    }
+
+    @Operation(summary = "로그아웃", description = "전달한 리프레시 토큰을 폐기합니다.")
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody AuthDto.LogoutRequest request) {
+        authService.logout(request);
+        return ResponseEntity.noContent().build();
     }
 }

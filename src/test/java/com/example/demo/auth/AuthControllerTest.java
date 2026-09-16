@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -58,15 +59,16 @@ class AuthControllerTest {
     }
 
     @Test
-    void 로그인_성공시_토큰을_반환한다() throws Exception {
+    void 로그인_성공시_토큰_쌍을_반환한다() throws Exception {
         when(authService.login(any(AuthDto.LoginRequest.class)))
-                .thenReturn(new AuthDto.TokenResponse("jwt-token", "writer"));
+                .thenReturn(new AuthDto.TokenResponse("access-token", "refresh-token", "writer"));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new AuthDto.LoginRequest("writer", "password123"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("jwt-token"))
+                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
                 .andExpect(jsonPath("$.username").value("writer"));
     }
 
@@ -79,5 +81,39 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new AuthDto.LoginRequest("writer", "wrong"))))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 토큰_재발급_성공시_새_토큰_쌍을_반환한다() throws Exception {
+        when(authService.refresh(any(AuthDto.RefreshRequest.class)))
+                .thenReturn(new AuthDto.TokenResponse("new-access-token", "new-refresh-token", "writer"));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.RefreshRequest("refresh-token"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-access-token"))
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh-token"));
+    }
+
+    @Test
+    void 토큰_재발급시_유효하지_않으면_401을_반환한다() throws Exception {
+        when(authService.refresh(any(AuthDto.RefreshRequest.class)))
+                .thenThrow(new InvalidRefreshTokenException());
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.RefreshRequest("invalid"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 로그아웃시_204를_반환한다() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.LogoutRequest("refresh-token"))))
+                .andExpect(status().isNoContent());
+
+        verify(authService).logout(any(AuthDto.LogoutRequest.class));
     }
 }
