@@ -43,7 +43,7 @@ jobs:
           SPRING_DATASOURCE_USERNAME: springuser
           SPRING_DATASOURCE_PASSWORD: springpass
           SPRING_JPA_HIBERNATE_DDL_AUTO: update
-          JWT_SECRET: ci-test-secret-key-not-used-in-production-32bytes-min
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION_MS: 3600000
         run: ./mvnw test
 
