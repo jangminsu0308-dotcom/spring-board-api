@@ -33,6 +33,9 @@ class AuthServiceTest {
     @Mock
     private JwtTokenProvider jwtTokenProvider;
 
+    @Mock
+    private LoginAttemptService loginAttemptService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -82,23 +85,36 @@ class AuthServiceTest {
         assertThat(response.refreshToken()).isEqualTo("refresh-token");
         assertThat(response.username()).isEqualTo("writer");
         verify(refreshTokenRepository).save(any(RefreshToken.class));
+        verify(loginAttemptService).recordSuccess("writer");
     }
 
     @Test
-    void login_존재하지_않는_아이디면_예외를_던진다() {
+    void login_존재하지_않는_아이디면_예외를_던지고_실패를_기록한다() {
         when(userRepository.findByUsername("unknown")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(new AuthDto.LoginRequest("unknown", "password123")))
                 .isInstanceOf(InvalidCredentialsException.class);
+        verify(loginAttemptService).recordFailure("unknown");
     }
 
     @Test
-    void login_비밀번호가_틀리면_예외를_던진다() {
+    void login_비밀번호가_틀리면_예외를_던지고_실패를_기록한다() {
         when(userRepository.findByUsername("writer")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "encoded-password")).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(new AuthDto.LoginRequest("writer", "wrong")))
                 .isInstanceOf(InvalidCredentialsException.class);
+        verify(loginAttemptService).recordFailure("writer");
+    }
+
+    @Test
+    void login_잠겨있으면_비밀번호_검증_없이_바로_예외를_던진다() {
+        doThrow(new TooManyLoginAttemptsException(60)).when(loginAttemptService).checkNotLocked("writer");
+
+        assertThatThrownBy(() -> authService.login(new AuthDto.LoginRequest("writer", "password123")))
+                .isInstanceOf(TooManyLoginAttemptsException.class);
+        verify(userRepository, never()).findByUsername(any());
+        verify(passwordEncoder, never()).matches(any(), any());
     }
 
     @Test

@@ -109,6 +109,7 @@ http://192.168.1.72/swagger-ui.html
 | 본인 소유가 아닌 리소스 수정/삭제 | 403 |
 | 존재하지 않는 리소스 | 404 |
 | 아이디 중복 | 409 |
+| 로그인 시도 초과 (브루트포스 방어) | 429 |
 | 예상치 못한 오류 | 500 |
 
 ## 인증 방식
@@ -123,8 +124,11 @@ JWT 액세스 토큰 + 리프레시 토큰 조합의 무상태(stateless) 인증
 6. `/api/auth/logout`으로 리프레시 토큰을 직접 폐기 가능
 7. 게시글/댓글 작성자는 로그인한 사용자로 서버에서 자동 지정 (요청 본문으로 조작 불가)
 8. 수정/삭제는 작성자 본인만 가능 — 아니면 403
+9. 같은 아이디로 5회 연속 로그인에 실패하면 5분간 잠금 (429) — 성공하면 실패 기록 초기화
 
 액세스 토큰은 서명 검증만으로 확인하는 기존 JWT 방식 그대로 서버에 상태를 두지 않고, 리프레시 토큰만 `refresh_tokens` 테이블에 저장해 폐기·회전이 가능하도록 했습니다.
+
+**브루트포스 방어**는 별도 저장소 없이 서버 메모리(`ConcurrentHashMap`)에 아이디별 실패 횟수를 세는 방식입니다. 구현이 간단하다는 장점이 있지만, 서버를 여러 대로 늘리면 계정당 허용 시도 횟수가 서버 대수만큼 늘어나는 한계가 있어 — 규모가 커지면 Redis 같은 공유 저장소로 옮겨야 합니다.
 
 ## 패키지 구조
 
@@ -139,9 +143,11 @@ com.example.demo
 │   ├── AuthDto                     # Request / Response
 │   ├── AuthService                 # 회원가입 / 로그인 / 재발급 / 로그아웃
 │   ├── AuthController              # HTTP 처리
+│   ├── LoginAttemptService         # 로그인 실패 횟수 추적, 브루트포스 잠금
 │   ├── DuplicateUsernameException
 │   ├── InvalidCredentialsException
-│   └── InvalidRefreshTokenException
+│   ├── InvalidRefreshTokenException
+│   └── TooManyLoginAttemptsException
 ├── security        # JWT 인증/인가
 │   ├── JwtTokenProvider            # 액세스 토큰 발급/검증, 리프레시 토큰 값 생성
 │   ├── JwtAuthenticationFilter     # 요청마다 토큰 검사 후 SecurityContext 설정

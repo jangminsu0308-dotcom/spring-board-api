@@ -84,6 +84,17 @@ class AuthControllerTest {
     }
 
     @Test
+    void 로그인_시도가_너무_많으면_429를_반환한다() throws Exception {
+        when(authService.login(any(AuthDto.LoginRequest.class)))
+                .thenThrow(new TooManyLoginAttemptsException(60));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.LoginRequest("writer", "wrong"))))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
     void 토큰_재발급_성공시_새_토큰_쌍을_반환한다() throws Exception {
         when(authService.refresh(any(AuthDto.RefreshRequest.class)))
                 .thenReturn(new AuthDto.TokenResponse("new-access-token", "new-refresh-token", "writer"));

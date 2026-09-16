@@ -18,6 +18,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final LoginAttemptService loginAttemptService;
 
     @Transactional
     public void register(AuthDto.RegisterRequest request) {
@@ -30,11 +31,18 @@ public class AuthService {
 
     @Transactional
     public AuthDto.TokenResponse login(AuthDto.LoginRequest request) {
+        loginAttemptService.checkNotLocked(request.username());
+
         User user = userRepository.findByUsername(request.username())
-                .orElseThrow(InvalidCredentialsException::new);
+                .orElseThrow(() -> {
+                    loginAttemptService.recordFailure(request.username());
+                    return new InvalidCredentialsException();
+                });
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            loginAttemptService.recordFailure(request.username());
             throw new InvalidCredentialsException();
         }
+        loginAttemptService.recordSuccess(request.username());
         return issueTokens(user);
     }
 
