@@ -10,22 +10,23 @@ Spring Boot 기반 게시판 API 서버. 개발 환경 구성부터 리눅스 �
 | Framework | Spring Boot 4.1, Spring Data JPA |
 | Database | MySQL 8.4 |
 | Build | Maven |
-| Server | Ubuntu 26.04, Nginx, systemd |
+| Server | Ubuntu 26.04, Nginx, Docker |
 
 ## 시스템 구성
 
 ```
-[개발] WSL2 Ubuntu
-   Maven 빌드 → JAR
-        ↓ scp
+[개발] WSL2 Ubuntu / Docker Compose (app + MySQL 컨테이너)
+        ↓ git pull
 [운영] VirtualBox Ubuntu (192.168.1.72)
-   ├ systemd  : 자동 시작 / 장애 시 재시작
-   ├ Spring   : 8080 (localhost 전용)
-   ├ MySQL    : 3306
-   └ Nginx    : 80 → 외부 노출 (리버스 프록시)
+   ├ Docker   : app 컨테이너, network_mode: host, 자동 재시작(restart: unless-stopped)
+   ├ MySQL    : 3306 (네이티브 설치 — 컨테이너화하지 않고 그대로 사용)
+   └ Nginx    : 80 → 외부 노출 (리버스 프록시, / → 127.0.0.1:8080)
 ```
 
-애플리케이션 포트를 외부에 노출하지 않고 Nginx만 방화벽에서 허용하는 구조.
+애플리케이션 포트를 외부에 노출하지 않고 Nginx만 방화벽에서 허용하는 구조. 배포는
+로컬에서 jar를 빌드해 scp로 옮기던 방식에서, **VM이 직접 `git pull` 후 이미지를 빌드**하는
+방식으로 바꿨다. MySQL은 이미 운영 데이터가 들어있어 컨테이너로 옮기지 않고, 앱 컨테이너가
+`network_mode: host`로 붙어 기존과 동일하게 `127.0.0.1:3306`에 접속한다.
 
 ## API 명세
 
@@ -209,6 +210,25 @@ docker compose up
 로컬에 MySQL을 따로 설치하거나 계정을 만들 필요가 없습니다. 데이터는 `mysql-data` 볼륨에
 남아서, `docker compose down` 후 다시 올려도 유지됩니다 (완전히 지우려면 `docker compose down -v`).
 
+### 운영 배포 (VM)
+
+운영 서버는 MySQL이 이미 네이티브로 설치돼 있고 실제 데이터가 들어있어서, `docker-compose.prod.yml`로
+**앱만** 컨테이너로 띄웁니다 (MySQL은 그대로 둠). VM에서:
+
+```bash
+git clone https://github.com/아이디/저장소명.git   # 최초 1회
+cd 저장소명
+git pull                                          # 이후 배포마다
+
+echo "JWT_SECRET=운영용_시크릿" > .env
+
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+`network_mode: host`로 띄우기 때문에 기존과 동일하게 `127.0.0.1:8080`에 바인딩되고,
+`127.0.0.1:3306`의 네이티브 MySQL에도 그대로 접속합니다 — Nginx 설정을 바꿀 필요가 없습니다.
+로컬에서 jar를 빌드해 scp로 옮기던 방식은 더 이상 쓰지 않습니다.
+
 ### 직접 실행
 
 ```bash
@@ -260,7 +280,9 @@ Entity를 그대로 응답하면 내부 구조 변경이 API 스펙 변경으로
 클래스에 `@Transactional(readOnly = true)`를 걸고 쓰기 메서드에만 개별 적용했습니다. 실수로 쓰기가 일어나는 것을 막고, 하이버네이트가 스냅샷을 만들지 않아 성능에도 유리합니다.
 
 **애플리케이션을 root로 실행하지 않음**
-전용 시스템 계정(`demoapp`)을 만들어 systemd에서 지정했습니다.
+Docker 컨테이너는 기본적으로 root로 실행되기 쉬운데, `Dockerfile`에서 전용 유저(`appuser`)를
+만들어 `USER appuser`로 전환해뒀습니다. (Docker 이전에는 systemd에 전용 계정 `demoapp`을
+지정하는 방식으로 같은 원칙을 지켰습니다.)
 
 **댓글은 게시글에 종속**
 `@OneToMany(cascade = ALL, orphanRemoval = true)`로 연관관계를 맺어, 게시글이 삭제되면 댓글도 함께 삭제되도록 했습니다. 댓글만 따로 존재할 이유가 없기 때문입니다.
@@ -268,8 +290,11 @@ Entity를 그대로 응답하면 내부 구조 변경이 API 스펙 변경으로
 **인증을 세션이 아닌 JWT로**
 서버가 클라이언트 상태를 들고 있지 않는 stateless 구조라 서버를 여러 대로 늘려도 세션 동기화 문제가 없습니다. 단점은 발급된 토큰을 서버에서 즉시 무효화할 수 없다는 점인데, 만료 시간을 짧게(1시간) 잡아 완화했습니다.
 
-**JWT 시크릿은 배포 아티팩트에 넣지 않음**
-`jwt.secret`은 로컬 `application.properties`(gitignore 대상)에만 두고, 운영 서버에는 systemd 서비스의 `Environment=JWT_SECRET=...`로 별도 주입해 애플리케이션 프로퍼티보다 우선 적용되게 했습니다. 이렇게 하면 개발 편의를 위해 로컬 값이 박힌 jar를 그대로 배포해도 운영 시크릿이 덮어써서 유지됩니다. CI에서는 GitHub Actions Secrets로 별도 값을 주입합니다.
+**JWT 시크릿은 이미지에 넣지 않음**
+`jwt.secret`은 로컬 `application.properties`(gitignore 대상)에만 두고, Docker 이미지 자체에는
+포함하지 않습니다. 운영 서버에서는 `docker-compose.prod.yml`이 VM의 `.env`(마찬가지로 gitignore)에서
+`JWT_SECRET`을 읽어 컨테이너 환경변수로 주입합니다. 로컬 개발 이미지를 그대로 배포해도 운영 시크릿이
+따로 유지되는 구조입니다. CI에서는 GitHub Actions Secrets로 별도 값을 주입합니다.
 
 **작성자를 요청 본문이 아닌 인증 정보에서 결정**
 초기 버전은 댓글 작성자를 클라이언트가 보내는 문자열로 그대로 믿었습니다. 인증 도입 후에는 JWT에서 추출한 로그인 사용자로 서버가 직접 지정하도록 바꿔, 클라이언트가 임의로 "다른 사람 이름"을 보낼 수 없게 했습니다.

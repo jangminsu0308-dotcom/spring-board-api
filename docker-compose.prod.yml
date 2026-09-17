@@ -1,0 +1,22 @@
+# 운영(VM) 전용 구성. 로컬 docker-compose.yml과 달리 MySQL은 컨테이너화하지 않는다 —
+# VM에는 이미 네이티브로 설치된 MySQL에 실제 데이터가 들어있어서, 그걸 그대로 쓰고
+# 애플리케이션만 컨테이너로 교체한다 (systemd로 java -jar를 직접 띄우던 것을 대체).
+#
+# network_mode: host로 VM의 네트워크를 그대로 쓰기 때문에:
+#   - 앱은 기존과 동일하게 host의 8080에 바인딩된다 (Nginx 설정을 바꿀 필요가 없다)
+#   - 앱 컨테이너에서 127.0.0.1:3306으로 네이티브 MySQL에 그대로 접속할 수 있다
+#
+# 사용법: docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  app:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/springdb?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: springuser
+      SPRING_DATASOURCE_PASSWORD: springpass
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: 3600000
+      JWT_REFRESH_EXPIRATION_MS: 604800000
