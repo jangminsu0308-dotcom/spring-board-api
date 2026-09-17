@@ -662,17 +662,35 @@ el('new-post-submit').addEventListener('click', async () => {
 });
 
 // ---------- 상세 화면 ----------
-// loadList를 addEventListener에 직접 넘기면 클릭 이벤트 객체가 page 인자로 들어가버린다
-// (loadList(page = currentPage)의 기본값이 무시됨) — 인자 없이 감싸서 호출한다.
-el('btn-back').addEventListener('click', () => loadList());
+// 브라우저 뒤로가기가 앱 안의 "목록으로"처럼 동작하도록 History API를 쓴다.
+// 상세 화면을 열 때 pushState로 기록을 남기고, popstate(뒤로/앞으로가기)가
+// 오면 그 기록의 상태만 보고 화면을 맞춰 그린다 — 뒤로가기 버튼과 "← 목록으로"
+// 버튼이 같은 경로(popstate)를 타게 해서 동작이 어긋나지 않게 한다.
+el('btn-back').addEventListener('click', () => history.back());
 
-async function openDetail(id) {
+function showListView() {
+  el('view-detail').hidden = true;
+  el('view-list').hidden = false;
+  loadList();
+}
+
+async function openDetail(id, { push = true } = {}) {
   currentPostId = id;
   el('view-list').hidden = true;
   el('view-detail').hidden = false;
+  if (push) history.pushState({ view: 'detail', id }, '', `#/posts/${id}`);
   await renderDetail();
   await renderComments();
 }
+
+window.addEventListener('popstate', (e) => {
+  const state = e.state;
+  if (state && state.view === 'detail') {
+    openDetail(state.id, { push: false });
+  } else {
+    showListView();
+  }
+});
 
 async function renderDetail() {
   const post = await api.post(currentPostId);
@@ -854,7 +872,16 @@ el('comment-submit').addEventListener('click', async () => {
   }
 });
 
-loadList();
+// 초기 진입: 목록 상태를 히스토리 바닥에 깔아둔 뒤(뒤로가기의 최종 목적지가 되도록),
+// URL에 #/posts/{id}가 있으면 그 글 상세로 바로 연다 (딥링크).
+// replaceState로 해시를 덮어쓰기 전에 원래 해시를 먼저 읽어둬야 한다.
+const initialDetailMatch = location.hash.match(/^#\/posts\/(\d+)$/);
+history.replaceState({ view: 'list' }, '', '#/');
+if (initialDetailMatch) {
+  openDetail(Number(initialDetailMatch[1]));
+} else {
+  loadList();
+}
 </script>
 </body>
 </html>
