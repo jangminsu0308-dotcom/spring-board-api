@@ -629,21 +629,24 @@ el('search-clear').addEventListener('click', () => {
 el('page-prev').addEventListener('click', () => loadList(currentPage - 1));
 el('page-next').addEventListener('click', () => loadList(currentPage + 1));
 
-// ---------- 새 글 작성 ----------
-el('btn-new-post').addEventListener('click', () => {
+// ---------- 새 글 작성 (목록/상세와 동급인 독립된 화면) ----------
+function showNewPostForm({ push = true } = {}) {
   if (!getUsername()) {
     showToast('로그인이 필요합니다.', 'error');
     el('btn-login').click();
     return;
   }
+  el('view-list').hidden = true;
+  el('view-detail').hidden = true;
   el('new-post-form').hidden = false;
   el('new-post-title').value = '';
   el('new-post-content').value = '';
   el('new-post-error').hidden = true;
-});
-el('new-post-cancel').addEventListener('click', () => {
-  el('new-post-form').hidden = true;
-});
+  if (push) history.pushState({ view: 'new-post' }, '', '#/posts/new');
+}
+
+el('btn-new-post').addEventListener('click', () => showNewPostForm());
+el('new-post-cancel').addEventListener('click', () => showListView());
 el('new-post-submit').addEventListener('click', async () => {
   const title = el('new-post-title').value.trim();
   const content = el('new-post-content').value.trim();
@@ -652,9 +655,9 @@ el('new-post-submit').addEventListener('click', async () => {
 
   const res = await api.createPost({ title, content });
   if (res.ok) {
-    el('new-post-form').hidden = true;
     showToast('게시글이 등록되었습니다.');
-    loadList(0);
+    currentPage = 0;
+    showListView();
   } else {
     errBox.textContent = await readError(res, '등록에 실패했습니다.');
     errBox.hidden = false;
@@ -675,6 +678,7 @@ el('btn-back').addEventListener('click', () => showListView());
 
 function showListView({ push = true } = {}) {
   el('view-detail').hidden = true;
+  el('new-post-form').hidden = true;
   el('view-list').hidden = false;
   if (push) history.pushState({ view: 'list' }, '', '#/');
   loadList();
@@ -683,6 +687,7 @@ function showListView({ push = true } = {}) {
 async function openDetail(id, { push = true } = {}) {
   currentPostId = id;
   el('view-list').hidden = true;
+  el('new-post-form').hidden = true;
   el('view-detail').hidden = false;
   if (push) history.pushState({ view: 'detail', id }, '', `#/posts/${id}`);
 
@@ -707,6 +712,8 @@ window.addEventListener('popstate', (e) => {
   const state = e.state;
   if (state && state.view === 'detail') {
     openDetail(state.id, { push: false });
+  } else if (state && state.view === 'new-post') {
+    showNewPostForm({ push: false });
   } else {
     showListView({ push: false });
   }
