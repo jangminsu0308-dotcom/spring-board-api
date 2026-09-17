@@ -1,4 +1,4 @@
-# VM(192.168.1.72)의 최신 MySQL 백업을 Windows로 가져온다.
+﻿# VM(192.168.1.72)의 최신 MySQL 백업을 Windows로 가져온다.
 # pull-latest-backup.sh(WSL/bash용)와 같은 역할이지만, Windows 작업 스케줄러가
 # 직접 실행할 수 있도록 PowerShell로 작성했다 — WSL은 VirtualBox와 하이퍼바이저가
 # 충돌해 VM 네트워크에 못 붙는 경우가 있었지만(13장 사고 참고), Windows 자체의
