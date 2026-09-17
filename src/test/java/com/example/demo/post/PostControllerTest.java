@@ -108,6 +108,13 @@ class PostControllerTest {
     }
 
     @Test
+    void 게시글_조회시_id가_숫자가_아니면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/posts/abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
     void 게시글_수정() throws Exception {
         PostDto.Response response = new PostDto.Response(1L, "수정된 제목", "수정된 내용", "writer", LocalDateTime.now(), LocalDateTime.now());
         when(postService.update(eq(1L), any(PostDto.Request.class), eq("writer"))).thenReturn(response);
