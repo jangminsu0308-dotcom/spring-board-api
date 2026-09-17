@@ -54,3 +54,17 @@ jobs:
         with:
           name: surefire-reports
           path: target/surefire-reports/
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: self-hosted
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+        with:
+          clean: false  # .env(운영 시크릿)가 워크스페이스에 남아있어야 하므로 지우지 않는다
+
+      - name: 컨테이너 재배포
+        run: docker compose -f docker-compose.prod.yml up -d --build
