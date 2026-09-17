@@ -23,7 +23,18 @@ set -euo pipefail
 
 BACKUP_DIR="$HOME/backups/mysql"
 CNF_FILE="$HOME/.mysql-backup.cnf"
+NTFY_TOPIC_FILE="$HOME/.ntfy-topic"
 RETENTION_DAYS=14
+
+# 백업 자체가 실패하면(계정 문제, 디스크 꽉 참 등) crontab 로그에만 남고 아무도
+# 모르고 지나가기 쉽다 — 14장의 알림 인프라를 그대로 재사용해 실패 시에만 알린다.
+notify_failure() {
+    [ -f "$NTFY_TOPIC_FILE" ] || return 0
+    curl -s -H "Title: spring-board-api 백업 실패" -H "Priority: high" \
+        -d "backup-mysql.sh 실패. VM에서 직접 로그 확인 필요." \
+        "https://ntfy.sh/$(cat "$NTFY_TOPIC_FILE")" > /dev/null
+}
+trap notify_failure ERR
 
 mkdir -p "$BACKUP_DIR"
 
