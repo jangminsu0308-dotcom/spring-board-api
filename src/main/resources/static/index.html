@@ -685,8 +685,22 @@ async function openDetail(id, { push = true } = {}) {
   el('view-list').hidden = true;
   el('view-detail').hidden = false;
   if (push) history.pushState({ view: 'detail', id }, '', `#/posts/${id}`);
-  await renderDetail();
-  await renderComments();
+
+  // 이전에 보던 글/댓글이 새 데이터가 도착할 때까지 화면에 그대로 남아있으면
+  // ("잔상") 다른 글을 눌렀는데 잠깐 엉뚱한 내용이 보이는 것처럼 느껴진다.
+  // fetch를 시작하기 전에 먼저 스켈레톤으로 비워둔다.
+  el('detail-card').innerHTML = `
+    <div class="skeleton-line w-60" style="height:20px;"></div>
+    <div class="skeleton-line w-30"></div>
+    <div class="skeleton-line w-90"></div>
+    <div class="skeleton-line w-90"></div>
+  `;
+  el('comment-list').innerHTML = '<div class="empty">불러오는 중...</div>';
+  el('comment-load-more').hidden = true;
+
+  // 글 내용과 댓글은 서로 무관한 요청이라, 순서대로 기다리지 않고 동시에 가져와
+  // 체감 대기 시간을 줄인다.
+  await Promise.all([renderDetail(), renderComments()]);
 }
 
 window.addEventListener('popstate', (e) => {
