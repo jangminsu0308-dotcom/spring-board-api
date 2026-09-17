@@ -663,14 +663,20 @@ el('new-post-submit').addEventListener('click', async () => {
 
 // ---------- 상세 화면 ----------
 // 브라우저 뒤로가기가 앱 안의 "목록으로"처럼 동작하도록 History API를 쓴다.
-// 상세 화면을 열 때 pushState로 기록을 남기고, popstate(뒤로/앞으로가기)가
-// 오면 그 기록의 상태만 보고 화면을 맞춰 그린다 — 뒤로가기 버튼과 "← 목록으로"
-// 버튼이 같은 경로(popstate)를 타게 해서 동작이 어긋나지 않게 한다.
-el('btn-back').addEventListener('click', () => history.back());
+// 목록 ↔ 상세 사이를 옮길 때마다(버튼 클릭이든 뒤로가기든) 매번 새 기록을 남긴다.
+// "← 목록으로" 버튼을 history.back()으로만 처리하면, 그 상태에서 다른 글을
+// 새로 클릭하는 순간 브라우저가 "뒤로 갔던 지점 이후의 기록"을 전부 지워버려
+// (표준 브라우저 동작) 목록→글A→목록→글B로 이동한 뒤 뒤로가기를 반복하면
+// 글A로는 못 돌아가고 앱을 빠져나가버린다. 그래서 "목록으로"도 뒤로가기 대신
+// pushState로 자기 자리를 스스로 기록해, 뒤로가기를 누를 때마다 지나온 화면을
+// 순서대로 그대로 되짚어가게 한다. popstate(실제 뒤로/앞으로가기)로 들어올 때는
+// 이미 있는 기록을 보고 그리는 것뿐이므로 다시 push하지 않는다(push:false).
+el('btn-back').addEventListener('click', () => showListView());
 
-function showListView() {
+function showListView({ push = true } = {}) {
   el('view-detail').hidden = true;
   el('view-list').hidden = false;
+  if (push) history.pushState({ view: 'list' }, '', '#/');
   loadList();
 }
 
@@ -688,7 +694,7 @@ window.addEventListener('popstate', (e) => {
   if (state && state.view === 'detail') {
     openDetail(state.id, { push: false });
   } else {
-    showListView();
+    showListView({ push: false });
   }
 });
 
