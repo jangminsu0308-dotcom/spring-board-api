@@ -7,7 +7,7 @@ services:
       MYSQL_PASSWORD: springpass
       MYSQL_ROOT_PASSWORD: rootpass
     ports:
-      - "3306:3306"
+      - "3307:3306"  # 호스트에 이미 MySQL이 3306을 쓰고 있으면 충돌하므로 3307로 노출
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
