@@ -30,8 +30,9 @@ mkdir -p "$BACKUP_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 OUT_FILE="$BACKUP_DIR/springdb_${TIMESTAMP}.sql.gz"
 
-mysqldump --defaults-extra-file="$CNF_FILE" \
+mysqldump --defaults-file="$CNF_FILE" \
     --single-transaction \
+    --no-tablespaces \
     --routines \
     springdb | gzip > "$OUT_FILE"
 
