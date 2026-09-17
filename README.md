@@ -193,6 +193,24 @@ com.example.demo
 
 ## 실행 방법
 
+### Docker Compose (추천 — MySQL 설치 없이 바로)
+
+```bash
+git clone https://github.com/아이디/저장소명.git
+cd 저장소명
+
+cp .env.example .env
+# .env의 JWT_SECRET을 무작위 문자열로 채우기
+
+docker compose up
+```
+
+앱(`http://localhost:8080`)과 MySQL이 함께 뜨고, Flyway가 스키마를 자동으로 만듭니다.
+로컬에 MySQL을 따로 설치하거나 계정을 만들 필요가 없습니다. 데이터는 `mysql-data` 볼륨에
+남아서, `docker compose down` 후 다시 올려도 유지됩니다 (완전히 지우려면 `docker compose down -v`).
+
+### 직접 실행
+
 ```bash
 git clone https://github.com/아이디/저장소명.git
 cd 저장소명
@@ -204,7 +222,7 @@ cp src/main/resources/application-example.properties \
 ./mvnw spring-boot:run
 ```
 
-DB는 미리 생성해야 합니다.
+이 경우 DB를 미리 생성해야 합니다.
 
 ```sql
 CREATE DATABASE springdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
