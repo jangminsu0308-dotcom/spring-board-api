@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,10 +37,14 @@ class PostControllerTest {
     @MockitoBean
     private PostService postService;
 
+    private static PostDto.Response response(Long id, String title, String content, String author) {
+        return new PostDto.Response(id, title, content, author, LocalDateTime.now(), LocalDateTime.now(), 0, false, 0);
+    }
+
     @Test
     void 게시글_생성_성공시_201과_Location을_반환한다() throws Exception {
-        PostDto.Response response = new PostDto.Response(1L, "제목", "내용", "writer", LocalDateTime.now(), LocalDateTime.now());
-        when(postService.create(any(PostDto.Request.class), eq("writer"))).thenReturn(response);
+        when(postService.create(any(PostDto.Request.class), eq("writer")))
+                .thenReturn(response(1L, "제목", "내용", "writer"));
 
         mockMvc.perform(post("/api/posts")
                         .with(user("writer"))
@@ -74,9 +79,8 @@ class PostControllerTest {
 
     @Test
     void 게시글_목록_조회() throws Exception {
-        PostDto.Response response = new PostDto.Response(1L, "제목", "내용", "writer", LocalDateTime.now(), LocalDateTime.now());
-        PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(response), 0, 10, 1, 1);
-        when(postService.findAll(0, 10, null)).thenReturn(pageResponse);
+        PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(response(1L, "제목", "내용", "writer")), 0, 10, 1, 1);
+        when(postService.findAll(0, 10, null, "latest", null)).thenReturn(pageResponse);
 
         mockMvc.perform(get("/api/posts"))
                 .andExpect(status().isOk())
@@ -85,21 +89,33 @@ class PostControllerTest {
     }
 
     @Test
-    void 게시글_목록_조회시_page_size_keyword를_그대로_전달한다() throws Exception {
+    void 게시글_목록_조회시_page_size_keyword_sort를_그대로_전달한다() throws Exception {
         PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(), 2, 5, 0, 0);
-        when(postService.findAll(2, 5, "제목")).thenReturn(pageResponse);
+        when(postService.findAll(2, 5, "제목", "oldest", null)).thenReturn(pageResponse);
 
-        mockMvc.perform(get("/api/posts").param("page", "2").param("size", "5").param("keyword", "제목"))
+        mockMvc.perform(get("/api/posts").param("page", "2").param("size", "5")
+                        .param("keyword", "제목").param("sort", "oldest"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(2))
                 .andExpect(jsonPath("$.size").value(5));
 
-        verify(postService).findAll(2, 5, "제목");
+        verify(postService).findAll(2, 5, "제목", "oldest", null);
+    }
+
+    @Test
+    void 게시글_목록_조회시_로그인_상태면_사용자명을_함께_전달한다() throws Exception {
+        PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(), 0, 10, 0, 0);
+        when(postService.findAll(0, 10, null, "latest", "writer")).thenReturn(pageResponse);
+
+        mockMvc.perform(get("/api/posts").with(user("writer")))
+                .andExpect(status().isOk());
+
+        verify(postService).findAll(0, 10, null, "latest", "writer");
     }
 
     @Test
     void 존재하지_않는_게시글_조회시_404를_반환한다() throws Exception {
-        when(postService.findById(999L)).thenThrow(new PostNotFoundException(999L));
+        when(postService.findById(eq(999L), isNull())).thenThrow(new PostNotFoundException(999L));
 
         mockMvc.perform(get("/api/posts/999"))
                 .andExpect(status().isNotFound())
@@ -116,8 +132,8 @@ class PostControllerTest {
 
     @Test
     void 게시글_수정() throws Exception {
-        PostDto.Response response = new PostDto.Response(1L, "수정된 제목", "수정된 내용", "writer", LocalDateTime.now(), LocalDateTime.now());
-        when(postService.update(eq(1L), any(PostDto.Request.class), eq("writer"))).thenReturn(response);
+        when(postService.update(eq(1L), any(PostDto.Request.class), eq("writer")))
+                .thenReturn(response(1L, "수정된 제목", "수정된 내용", "writer"));
 
         mockMvc.perform(put("/api/posts/1")
                         .with(user("writer"))
@@ -133,5 +149,23 @@ class PostControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(postService).delete(1L, "writer");
+    }
+
+    @Test
+    void 좋아요_토글_성공시_결과를_반환한다() throws Exception {
+        when(postService.toggleLike(1L, "reader")).thenReturn(new PostDto.LikeResponse(4L, true));
+
+        mockMvc.perform(post("/api/posts/1/like").with(user("reader")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(4))
+                .andExpect(jsonPath("$.likedByMe").value(true));
+    }
+
+    @Test
+    void 좋아요_토글시_인증이_없으면_401을_반환한다() throws Exception {
+        mockMvc.perform(post("/api/posts/1/like"))
+                .andExpect(status().isUnauthorized());
+
+        verify(postService, never()).toggleLike(any(), any());
     }
 }

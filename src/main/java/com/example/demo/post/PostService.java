@@ -11,6 +11,12 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -18,33 +24,69 @@ public class PostService {
 
 	private final PostRepository postRepository;
 	private final UserRepository userRepository;
+	private final PostLikeRepository postLikeRepository;
+	private final CommentRepository commentRepository;
 
 	@Transactional
 	public PostDto.Response create(PostDto.Request request, String username) {
 		User author = getUser(username);
 		Post post = new Post(request.title(), request.content(), author);
-		return PostDto.Response.from(postRepository.save(post));
+		return toResponse(postRepository.save(post), username);
 	}
 
 	private static final int MAX_PAGE_SIZE = 100;
 
-	public PostDto.PageResponse findAll(int page, int size, String keyword) {
+	public PostDto.PageResponse findAll(int page, int size, String keyword, String sort, String username) {
 		Pageable pageable = PageRequest.of(
 				Math.max(page, 0),
 				Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
-				Sort.by(Sort.Direction.DESC, "id"));
+				sortFor(sort));
 
 		Page<Post> result = (keyword == null || keyword.isBlank())
 				? postRepository.findAll(pageable)
 				: postRepository.findByTitleContainingIgnoreCase(keyword, pageable);
 
-		return PostDto.PageResponse.from(result);
+		List<Long> postIds = result.getContent().stream().map(Post::getId).toList();
+
+		// 좋아요·댓글 개수를 게시글마다 따로 조회하면 페이지당 1+N번이 된다(6장/13장의 N+1과 같은 문제).
+		// 이 페이지에 있는 post id 전체를 한 번에 묶어 쿼리 1~2번으로 끝낸다.
+		Map<Long, Long> likeCounts = toCountMap(postLikeRepository.countGroupedByPostIds(postIds));
+		Map<Long, Long> commentCounts = toCountMap(commentRepository.countGroupedByPostIds(postIds));
+		Set<Long> likedByMePostIds = (username == null || postIds.isEmpty())
+				? Set.of()
+				: new HashSet<>(postLikeRepository.findLikedPostIds(username, postIds));
+
+		List<PostDto.Response> content = result.getContent().stream()
+				.map(post -> PostDto.Response.from(
+						post,
+						likeCounts.getOrDefault(post.getId(), 0L),
+						likedByMePostIds.contains(post.getId()),
+						commentCounts.getOrDefault(post.getId(), 0L)))
+				.toList();
+
+		return new PostDto.PageResponse(content, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
 	}
 
-	public PostDto.Response findById(Long id) {
+	private Sort sortFor(String sort) {
+		return switch (sort == null ? "" : sort) {
+			case "oldest" -> Sort.by(Sort.Direction.ASC, "id");
+			case "title" -> Sort.by(Sort.Direction.ASC, "title");
+			default -> Sort.by(Sort.Direction.DESC, "id");
+		};
+	}
+
+	private Map<Long, Long> toCountMap(List<Object[]> rows) {
+		Map<Long, Long> map = new HashMap<>();
+		for (Object[] row : rows) {
+			map.put((Long) row[0], (Long) row[1]);
+		}
+		return map;
+	}
+
+	public PostDto.Response findById(Long id, String username) {
 		Post post = postRepository.findById(id)
 			.orElseThrow(() -> new PostNotFoundException(id));
-		return PostDto.Response.from(post);
+		return toResponse(post, username);
 	}
 
 	@Transactional
@@ -53,7 +95,7 @@ public class PostService {
 			.orElseThrow(() -> new PostNotFoundException(id));
 		validateOwner(post.getAuthor().getUsername(), username);
 		post.update(request.title(), request.content());
-		return PostDto.Response.from(post);
+		return toResponse(post, username);
 	}
 
 	@Transactional
@@ -62,6 +104,32 @@ public class PostService {
 			.orElseThrow(() -> new PostNotFoundException(id));
 		validateOwner(post.getAuthor().getUsername(), username);
 		postRepository.delete(post);
+	}
+
+	/** 이미 좋아요를 눌렀으면 취소하고, 안 눌렀으면 좋아요를 남긴다. */
+	@Transactional
+	public PostDto.LikeResponse toggleLike(Long postId, String username) {
+		Post post = postRepository.findById(postId)
+				.orElseThrow(() -> new PostNotFoundException(postId));
+		User user = getUser(username);
+
+		boolean likedByMe;
+		var existing = postLikeRepository.findByPostAndUser(post, user);
+		if (existing.isPresent()) {
+			postLikeRepository.delete(existing.get());
+			likedByMe = false;
+		} else {
+			postLikeRepository.save(new PostLike(post, user));
+			likedByMe = true;
+		}
+		return new PostDto.LikeResponse(postLikeRepository.countByPost(post), likedByMe);
+	}
+
+	private PostDto.Response toResponse(Post post, String username) {
+		long likeCount = postLikeRepository.countByPost(post);
+		boolean likedByMe = username != null && postLikeRepository.existsByPostAndUser_Username(post, username);
+		long commentCount = commentRepository.countByPostId(post.getId());
+		return PostDto.Response.from(post, likeCount, likedByMe, commentCount);
 	}
 
 	private User getUser(String username) {

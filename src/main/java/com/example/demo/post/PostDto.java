@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.springframework.data.domain.Page;
 
 public class PostDto {
 
@@ -23,16 +22,24 @@ public class PostDto {
 		String content,
 		String author,
 		LocalDateTime createdAt,
-		LocalDateTime updatedAt
+		LocalDateTime updatedAt,
+		long likeCount,
+		boolean likedByMe,
+		long commentCount
 	) {
-	static Response from(Post post) {
-		return new Response(
-			post.getId(),
-			post.getTitle(),
-			post.getContent(),
-			post.getAuthor().getUsername(),
-			post.getCreatedAt(),
-			post.getUpdatedAt()
+		// 좋아요·댓글 개수는 Post 엔티티만으로는 알 수 없다(별도 테이블 집계가 필요) —
+		// 그래서 from(Post)이 아니라 이미 집계해온 값을 그대로 받는다.
+		static Response from(Post post, long likeCount, boolean likedByMe, long commentCount) {
+			return new Response(
+				post.getId(),
+				post.getTitle(),
+				post.getContent(),
+				post.getAuthor().getUsername(),
+				post.getCreatedAt(),
+				post.getUpdatedAt(),
+				likeCount,
+				likedByMe,
+				commentCount
 			);
 		}
 	}
@@ -43,15 +50,10 @@ public class PostDto {
 		int size,
 		long totalElements,
 		int totalPages
-	) {
-		static PageResponse from(Page<Post> page) {
-			return new PageResponse(
-				page.getContent().stream().map(Response::from).toList(),
-				page.getNumber(),
-				page.getSize(),
-				page.getTotalElements(),
-				page.getTotalPages()
-			);
-		}
-	}
+	) {}
+
+	public record LikeResponse(
+		long likeCount,
+		boolean likedByMe
+	) {}
 }

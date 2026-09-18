@@ -5,6 +5,7 @@ import com.example.demo.auth.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -32,6 +34,12 @@ class PostServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private PostLikeRepository postLikeRepository;
+
+    @Mock
+    private CommentRepository commentRepository;
 
     @InjectMocks
     private PostService postService;
@@ -59,6 +67,8 @@ class PostServiceTest {
         assertThat(response.title()).isEqualTo("제목");
         assertThat(response.content()).isEqualTo("내용");
         assertThat(response.author()).isEqualTo("writer");
+        assertThat(response.likeCount()).isEqualTo(0);
+        assertThat(response.commentCount()).isEqualTo(0);
         verify(postRepository).save(any(Post.class));
     }
 
@@ -67,7 +77,7 @@ class PostServiceTest {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
         when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        PostDto.PageResponse result = postService.findAll(0, 10, null);
+        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", null);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).id()).isEqualTo(1L);
@@ -80,7 +90,7 @@ class PostServiceTest {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
         when(postRepository.findByTitleContainingIgnoreCase(eq("제목"), any(Pageable.class))).thenReturn(page);
 
-        PostDto.PageResponse result = postService.findAll(0, 10, "제목");
+        PostDto.PageResponse result = postService.findAll(0, 10, "제목", "latest", null);
 
         assertThat(result.content()).hasSize(1);
         verify(postRepository).findByTitleContainingIgnoreCase(eq("제목"), any(Pageable.class));
@@ -88,10 +98,48 @@ class PostServiceTest {
     }
 
     @Test
+    void findAll_sort가_oldest면_id_오름차순으로_정렬한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        when(postRepository.findAll(pageableCaptor.capture())).thenReturn(page);
+
+        postService.findAll(0, 10, null, "oldest", null);
+
+        Sort.Order order = pageableCaptor.getValue().getSort().getOrderFor("id");
+        assertThat(order).isNotNull();
+        assertThat(order.getDirection()).isEqualTo(Sort.Direction.ASC);
+    }
+
+    @Test
+    void findAll_로그인한_사용자가_좋아요한_글은_likedByMe가_true다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
+        when(postLikeRepository.findLikedPostIds("writer", List.of(1L))).thenReturn(List.of(1L));
+        when(postLikeRepository.countGroupedByPostIds(List.of(1L)))
+                .thenReturn(List.<Object[]>of(new Object[]{1L, 3L}));
+
+        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", "writer");
+
+        assertThat(result.content().get(0).likedByMe()).isTrue();
+        assertThat(result.content().get(0).likeCount()).isEqualTo(3L);
+    }
+
+    @Test
+    void findAll_비로그인이면_likedByMe_조회_자체를_하지_않는다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", null);
+
+        assertThat(result.content().get(0).likedByMe()).isFalse();
+        verify(postLikeRepository, never()).findLikedPostIds(any(), any());
+    }
+
+    @Test
     void findById_존재하면_응답을_반환한다() {
         when(postRepository.findById(1L)).thenReturn(Optional.of(post));
 
-        PostDto.Response response = postService.findById(1L);
+        PostDto.Response response = postService.findById(1L, null);
 
         assertThat(response.title()).isEqualTo("제목");
     }
@@ -100,7 +148,7 @@ class PostServiceTest {
     void findById_존재하지_않으면_예외를_던진다() {
         when(postRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> postService.findById(999L))
+        assertThatThrownBy(() -> postService.findById(999L, null))
                 .isInstanceOf(PostNotFoundException.class);
     }
 
@@ -155,5 +203,43 @@ class PostServiceTest {
         assertThatThrownBy(() -> postService.delete(1L, "other"))
                 .isInstanceOf(AccessDeniedException.class);
         verify(postRepository, never()).delete(any(Post.class));
+    }
+
+    @Test
+    void toggleLike_처음_누르면_좋아요를_저장하고_likedByMe는_true다() {
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(userRepository.findByUsername("reader")).thenReturn(Optional.of(author));
+        when(postLikeRepository.findByPostAndUser(post, author)).thenReturn(Optional.empty());
+        when(postLikeRepository.countByPost(post)).thenReturn(1L);
+
+        PostDto.LikeResponse response = postService.toggleLike(1L, "reader");
+
+        assertThat(response.likedByMe()).isTrue();
+        assertThat(response.likeCount()).isEqualTo(1L);
+        verify(postLikeRepository).save(any(PostLike.class));
+    }
+
+    @Test
+    void toggleLike_이미_눌렀으면_취소하고_likedByMe는_false다() {
+        PostLike existing = new PostLike(post, author);
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(userRepository.findByUsername("reader")).thenReturn(Optional.of(author));
+        when(postLikeRepository.findByPostAndUser(post, author)).thenReturn(Optional.of(existing));
+        when(postLikeRepository.countByPost(post)).thenReturn(0L);
+
+        PostDto.LikeResponse response = postService.toggleLike(1L, "reader");
+
+        assertThat(response.likedByMe()).isFalse();
+        assertThat(response.likeCount()).isEqualTo(0L);
+        verify(postLikeRepository).delete(existing);
+        verify(postLikeRepository, never()).save(any(PostLike.class));
+    }
+
+    @Test
+    void toggleLike_게시글이_없으면_예외를_던진다() {
+        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> postService.toggleLike(999L, "reader"))
+                .isInstanceOf(PostNotFoundException.class);
     }
 }
