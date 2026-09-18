@@ -2,6 +2,7 @@ package com.example.demo.post;
 
 import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
+import com.example.demo.common.RateLimiterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -11,6 +12,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -26,9 +28,13 @@ public class PostService {
 	private final UserRepository userRepository;
 	private final PostLikeRepository postLikeRepository;
 	private final CommentRepository commentRepository;
+	private final RateLimiterService rateLimiter;
+
+	private static final int MAX_POSTS_PER_MINUTE = 5;
 
 	@Transactional
 	public PostDto.Response create(PostDto.Request request, String username) {
+		rateLimiter.checkAllowed("post:" + username, MAX_POSTS_PER_MINUTE, Duration.ofMinutes(1));
 		User author = getUser(username);
 		Post post = new Post(request.title(), request.content(), author);
 		return toResponse(postRepository.save(post), username);

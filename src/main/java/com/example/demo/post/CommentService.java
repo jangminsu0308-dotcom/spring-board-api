@@ -2,6 +2,7 @@ package com.example.demo.post;
 
 import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
+import com.example.demo.common.RateLimiterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -11,6 +12,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -19,9 +22,13 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final RateLimiterService rateLimiter;
+
+    private static final int MAX_COMMENTS_PER_MINUTE = 10;
 
     @Transactional
     public CommentDto.Response create(Long postId, CommentDto.Request request, String username) {
+        rateLimiter.checkAllowed("comment:" + username, MAX_COMMENTS_PER_MINUTE, Duration.ofMinutes(1));
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new PostNotFoundException(postId));
         User author = getUser(username);

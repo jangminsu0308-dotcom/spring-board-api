@@ -2,6 +2,8 @@ package com.example.demo.post;
 
 import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
+import com.example.demo.common.RateLimiterService;
+import com.example.demo.common.TooManyRequestsException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +43,9 @@ class PostServiceTest {
     @Mock
     private CommentRepository commentRepository;
 
+    @Mock
+    private RateLimiterService rateLimiter;
+
     @InjectMocks
     private PostService postService;
 
@@ -70,6 +75,16 @@ class PostServiceTest {
         assertThat(response.likeCount()).isEqualTo(0);
         assertThat(response.commentCount()).isEqualTo(0);
         verify(postRepository).save(any(Post.class));
+    }
+
+    @Test
+    void create_요청이_너무_많으면_예외를_던지고_저장하지_않는다() {
+        doThrow(new TooManyRequestsException(30))
+                .when(rateLimiter).checkAllowed(eq("post:writer"), anyInt(), any());
+
+        assertThatThrownBy(() -> postService.create(new PostDto.Request("제목", "내용"), "writer"))
+                .isInstanceOf(TooManyRequestsException.class);
+        verify(postRepository, never()).save(any(Post.class));
     }
 
     @Test
