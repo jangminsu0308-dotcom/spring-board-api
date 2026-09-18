@@ -460,6 +460,20 @@ function showConfirm(message) {
   });
 }
 
+// 버튼을 눌러 비동기 요청을 보내는 동안 그 버튼을 비활성화하고 문구를 바꿔둔다.
+// 안 하면 응답이 오기 전에 같은 버튼을 빠르게 두 번 눌러 요청이 중복으로 나갈 수 있다.
+async function withLoading(button, label, fn) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = label;
+  try {
+    await fn();
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
 function fmt(dateStr) {
   if (!dateStr) return '';
   return dateStr.replace('T', ' ').slice(0, 16);
@@ -506,22 +520,24 @@ el('btn-login').addEventListener('click', () => {
   el('login-error').hidden = true;
 });
 el('login-cancel').addEventListener('click', () => { el('login-form').hidden = true; });
-el('login-submit').addEventListener('click', async () => {
+el('login-submit').addEventListener('click', async (e) => {
   const username = el('login-username').value.trim();
   const password = el('login-password').value;
   const errBox = el('login-error');
   errBox.hidden = true;
 
-  const res = await api.login({ username, password });
-  if (res.ok) {
-    const data = await res.json();
-    setAuth(data.accessToken, data.refreshToken, data.username);
-    el('login-form').hidden = true;
-    renderAuthBar();
-  } else {
-    errBox.textContent = await readError(res, '로그인에 실패했습니다.');
-    errBox.hidden = false;
-  }
+  await withLoading(e.target, '로그인 중...', async () => {
+    const res = await api.login({ username, password });
+    if (res.ok) {
+      const data = await res.json();
+      setAuth(data.accessToken, data.refreshToken, data.username);
+      el('login-form').hidden = true;
+      renderAuthBar();
+    } else {
+      errBox.textContent = await readError(res, '로그인에 실패했습니다.');
+      errBox.hidden = false;
+    }
+  });
 });
 
 el('btn-register').addEventListener('click', () => {
@@ -532,20 +548,22 @@ el('btn-register').addEventListener('click', () => {
   el('register-error').hidden = true;
 });
 el('register-cancel').addEventListener('click', () => { el('register-form').hidden = true; });
-el('register-submit').addEventListener('click', async () => {
+el('register-submit').addEventListener('click', async (e) => {
   const username = el('register-username').value.trim();
   const password = el('register-password').value;
   const errBox = el('register-error');
   errBox.hidden = true;
 
-  const res = await api.register({ username, password });
-  if (res.ok) {
-    el('register-form').hidden = true;
-    showToast('가입이 완료되었습니다. 로그인해주세요.');
-  } else {
-    errBox.textContent = await readError(res, '회원가입에 실패했습니다.');
-    errBox.hidden = false;
-  }
+  await withLoading(e.target, '가입 중...', async () => {
+    const res = await api.register({ username, password });
+    if (res.ok) {
+      el('register-form').hidden = true;
+      showToast('가입이 완료되었습니다. 로그인해주세요.');
+    } else {
+      errBox.textContent = await readError(res, '회원가입에 실패했습니다.');
+      errBox.hidden = false;
+    }
+  });
 });
 
 el('btn-logout').addEventListener('click', () => {
@@ -647,21 +665,23 @@ function showNewPostForm({ push = true } = {}) {
 
 el('btn-new-post').addEventListener('click', () => showNewPostForm());
 el('new-post-cancel').addEventListener('click', () => showListView());
-el('new-post-submit').addEventListener('click', async () => {
+el('new-post-submit').addEventListener('click', async (e) => {
   const title = el('new-post-title').value.trim();
   const content = el('new-post-content').value.trim();
   const errBox = el('new-post-error');
   errBox.hidden = true;
 
-  const res = await api.createPost({ title, content });
-  if (res.ok) {
-    showToast('게시글이 등록되었습니다.');
-    currentPage = 0;
-    showListView();
-  } else {
-    errBox.textContent = await readError(res, '등록에 실패했습니다.');
-    errBox.hidden = false;
-  }
+  await withLoading(e.target, '등록 중...', async () => {
+    const res = await api.createPost({ title, content });
+    if (res.ok) {
+      showToast('게시글이 등록되었습니다.');
+      currentPage = 0;
+      showListView();
+    } else {
+      errBox.textContent = await readError(res, '등록에 실패했습니다.');
+      errBox.hidden = false;
+    }
+  });
 });
 
 // ---------- 상세 화면 ----------
@@ -766,17 +786,19 @@ async function renderDetail() {
     `;
     card.querySelector('#edit-content').value = post.content;
     card.querySelector('#edit-cancel').addEventListener('click', renderDetail);
-    card.querySelector('#edit-submit').addEventListener('click', async () => {
+    card.querySelector('#edit-submit').addEventListener('click', async (e) => {
       const title = card.querySelector('#edit-title').value.trim();
       const content = card.querySelector('#edit-content').value.trim();
-      const res = await api.updatePost(post.id, { title, content });
-      if (res.ok) {
-        renderDetail();
-      } else {
-        const errBox = card.querySelector('#edit-error');
-        errBox.textContent = await readError(res, '수정에 실패했습니다.');
-        errBox.hidden = false;
-      }
+      await withLoading(e.target, '저장 중...', async () => {
+        const res = await api.updatePost(post.id, { title, content });
+        if (res.ok) {
+          renderDetail();
+        } else {
+          const errBox = card.querySelector('#edit-error');
+          errBox.textContent = await readError(res, '수정에 실패했습니다.');
+          errBox.hidden = false;
+        }
+      });
     });
   });
 }
@@ -836,15 +858,17 @@ function buildCommentItem(c) {
     body.querySelector('[data-action="cancel"]').addEventListener('click', () => {
       body.textContent = c.content;
     });
-    body.querySelector('[data-action="save"]').addEventListener('click', async () => {
+    body.querySelector('[data-action="save"]').addEventListener('click', async (e) => {
       const content = body.querySelector(`#edit-c-${c.id}`).value.trim();
-      const res = await api.updateComment(c.id, { content });
-      if (res.ok) {
-        c.content = content;
-        body.textContent = content;
-      } else {
-        showToast(await readError(res, '수정에 실패했습니다.'), 'error');
-      }
+      await withLoading(e.target, '저장 중...', async () => {
+        const res = await api.updateComment(c.id, { content });
+        if (res.ok) {
+          c.content = content;
+          body.textContent = content;
+        } else {
+          showToast(await readError(res, '수정에 실패했습니다.'), 'error');
+        }
+      });
     });
   });
 
@@ -876,7 +900,7 @@ el('comment-load-more').addEventListener('click', async () => {
   el('comment-load-more').hidden = commentPage + 1 >= result.totalPages;
 });
 
-el('comment-submit').addEventListener('click', async () => {
+el('comment-submit').addEventListener('click', async (e) => {
   if (!getUsername()) {
     showToast('로그인이 필요합니다.', 'error');
     el('btn-login').click();
@@ -886,6 +910,7 @@ el('comment-submit').addEventListener('click', async () => {
   const errBox = el('comment-error');
   errBox.hidden = true;
 
+  await withLoading(e.target, '등록 중...', async () => {
   const res = await api.createComment(currentPostId, { content });
   if (res.ok) {
     const created = await res.json();
@@ -897,6 +922,7 @@ el('comment-submit').addEventListener('click', async () => {
     errBox.textContent = await readError(res, '댓글 등록에 실패했습니다.');
     errBox.hidden = false;
   }
+  });
 });
 
 // 초기 진입: 목록 상태를 히스토리 바닥에 깔아둔 뒤(뒤로가기의 최종 목적지가 되도록),
