@@ -64,6 +64,19 @@ public class AuthService {
                 .ifPresent(RefreshToken::revoke);
     }
 
+    /** 비밀번호를 바꾸면 유출됐을 수 있는 기존 리프레시 토큰을 전부 폐기한다 — 바꾸는 순간 모든 기기에서 다시 로그인해야 한다. */
+    @Transactional
+    public void changePassword(String username, AuthDto.ChangePasswordRequest request) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalStateException("인증된 사용자를 찾을 수 없습니다: " + username));
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException();
+        }
+        user.changePassword(passwordEncoder.encode(request.newPassword()));
+        refreshTokenRepository.findByUserAndRevokedFalse(user)
+                .forEach(RefreshToken::revoke);
+    }
+
     private AuthDto.TokenResponse issueTokens(User user) {
         String accessToken = jwtTokenProvider.createAccessToken(user.getUsername());
         String refreshTokenValue = jwtTokenProvider.generateRefreshToken();

@@ -173,4 +173,36 @@ class AuthServiceTest {
 
         authService.logout(new AuthDto.LogoutRequest("unknown"));
     }
+
+    @Test
+    void changePassword_현재_비밀번호가_맞으면_변경하고_기존_리프레시_토큰을_전부_폐기한다() {
+        when(userRepository.findByUsername("writer")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", "encoded-password")).thenReturn(true);
+        when(passwordEncoder.encode("newpassword123")).thenReturn("new-encoded-password");
+        when(refreshTokenRepository.findByUserAndRevokedFalse(user)).thenReturn(java.util.List.of(refreshToken));
+
+        authService.changePassword("writer", new AuthDto.ChangePasswordRequest("password123", "newpassword123"));
+
+        assertThat(user.getPassword()).isEqualTo("new-encoded-password");
+        assertThat(refreshToken.isUsable()).isFalse();
+    }
+
+    @Test
+    void changePassword_현재_비밀번호가_틀리면_예외를_던지고_변경하지_않는다() {
+        when(userRepository.findByUsername("writer")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "encoded-password")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword("writer", new AuthDto.ChangePasswordRequest("wrong", "newpassword123")))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThat(user.getPassword()).isEqualTo("encoded-password");
+        verify(refreshTokenRepository, never()).findByUserAndRevokedFalse(any());
+    }
+
+    @Test
+    void changePassword_인증된_사용자가_없으면_예외를_던진다() {
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.changePassword("ghost", new AuthDto.ChangePasswordRequest("password123", "newpassword123")))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

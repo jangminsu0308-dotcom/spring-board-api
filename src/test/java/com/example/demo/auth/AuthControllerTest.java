@@ -13,10 +13,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -126,5 +129,45 @@ class AuthControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(authService).logout(any(AuthDto.LogoutRequest.class));
+    }
+
+    @Test
+    void 비밀번호_변경_성공시_204를_반환한다() throws Exception {
+        mockMvc.perform(put("/api/auth/password")
+                        .with(user("writer"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.ChangePasswordRequest("password123", "newpassword123"))))
+                .andExpect(status().isNoContent());
+
+        verify(authService).changePassword(eq("writer"), any(AuthDto.ChangePasswordRequest.class));
+    }
+
+    @Test
+    void 비밀번호_변경시_인증이_없으면_401을_반환한다() throws Exception {
+        mockMvc.perform(put("/api/auth/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.ChangePasswordRequest("password123", "newpassword123"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 비밀번호_변경시_현재_비밀번호가_틀리면_401을_반환한다() throws Exception {
+        doThrow(new InvalidCredentialsException()).when(authService)
+                .changePassword(eq("writer"), any(AuthDto.ChangePasswordRequest.class));
+
+        mockMvc.perform(put("/api/auth/password")
+                        .with(user("writer"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.ChangePasswordRequest("wrong", "newpassword123"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 비밀번호_변경시_새_비밀번호가_너무_짧으면_400을_반환한다() throws Exception {
+        mockMvc.perform(put("/api/auth/password")
+                        .with(user("writer"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.ChangePasswordRequest("password123", "short"))))
+                .andExpect(status().isBadRequest());
     }
 }

@@ -34,4 +34,8 @@ public class User {
     void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
 }
