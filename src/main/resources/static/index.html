@@ -49,6 +49,11 @@
     }
   }
   * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   body {
     margin: 0;
     background: var(--bg);
@@ -103,6 +108,16 @@
   button.danger { background: var(--danger); }
   button.danger:hover { background: var(--danger-hover); }
   button:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.6s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   input, textarea {
     width: 100%;
@@ -127,11 +142,25 @@
 
   .top-actions { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
 
-  .post-item { cursor: pointer; }
+  .post-item { cursor: pointer; position: relative; padding-right: 44px; }
   .post-item:hover { border-color: var(--accent); box-shadow: var(--shadow-hover); transform: translateY(-1px); background: var(--card-hover); }
   .post-title { font-weight: 650; margin: 0 0 5px; letter-spacing: -0.01em; }
   .post-meta { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
   .post-excerpt { margin: 9px 0 0; color: var(--muted); font-size: 0.88rem; white-space: pre-wrap; line-height: 1.5; }
+  .post-arrow {
+    position: absolute; top: 20px; right: 18px;
+    color: var(--muted);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .post-item:hover .post-arrow { opacity: 1; transform: translateX(0); color: var(--accent); }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .post-item { animation: cardIn 0.3s ease backwards; }
 
   .avatar {
     width: 20px; height: 20px; border-radius: 50%;
@@ -545,14 +574,14 @@ function showConfirm(message) {
 // 버튼을 눌러 비동기 요청을 보내는 동안 그 버튼을 비활성화하고 문구를 바꿔둔다.
 // 안 하면 응답이 오기 전에 같은 버튼을 빠르게 두 번 눌러 요청이 중복으로 나갈 수 있다.
 async function withLoading(button, label, fn) {
-  const original = button.textContent;
+  const original = button.innerHTML;
   button.disabled = true;
-  button.textContent = label;
+  button.innerHTML = `<span class="spinner"></span>${label}`;
   try {
     await fn();
   } finally {
     button.disabled = false;
-    button.textContent = original;
+    button.innerHTML = original;
   }
 }
 
@@ -728,13 +757,15 @@ async function loadList(page = currentPage) {
       return;
     }
     list.innerHTML = '';
-    result.content.forEach(post => {
+    result.content.forEach((post, index) => {
       const item = document.createElement('div');
       item.className = 'card post-item';
+      item.style.animationDelay = `${Math.min(index * 40, 200)}ms`;
       item.innerHTML = `
         <p class="post-title"></p>
         <p class="post-meta"></p>
         <p class="post-excerpt"></p>
+        <span class="post-arrow">${ICONS.arrowRight}</span>
       `;
       item.querySelector('.post-title').textContent = post.title;
       const meta = item.querySelector('.post-meta');
