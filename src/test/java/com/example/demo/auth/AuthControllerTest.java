@@ -1,5 +1,6 @@
 package com.example.demo.auth;
 
+import com.example.demo.common.NtfyNotifier;
 import com.example.demo.security.JwtAuthenticationEntryPoint;
 import com.example.demo.security.JwtTokenProvider;
 import com.example.demo.security.SecurityConfig;
@@ -24,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtTokenProvider.class})
+@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtTokenProvider.class, NtfyNotifier.class})
 class AuthControllerTest {
 
     @Autowired

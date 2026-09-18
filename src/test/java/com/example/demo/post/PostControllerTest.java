@@ -1,5 +1,6 @@
 package com.example.demo.post;
 
+import com.example.demo.common.NtfyNotifier;
 import com.example.demo.security.JwtAuthenticationEntryPoint;
 import com.example.demo.security.JwtTokenProvider;
 import com.example.demo.security.SecurityConfig;
@@ -26,7 +27,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PostController.class)
-@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtTokenProvider.class})
+@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class, JwtTokenProvider.class, NtfyNotifier.class})
 class PostControllerTest {
 
     @Autowired

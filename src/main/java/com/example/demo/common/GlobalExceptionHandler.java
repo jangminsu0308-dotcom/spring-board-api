@@ -5,6 +5,7 @@ import com.example.demo.auth.InvalidCredentialsException;
 import com.example.demo.auth.InvalidRefreshTokenException;
 import com.example.demo.auth.TooManyLoginAttemptsException;
 import com.example.demo.post.PostNotFoundException;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -20,9 +21,11 @@ import java.util.stream.Collectors;
 import com.example.demo.post.CommentNotFoundException;
 
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final NtfyNotifier ntfyNotifier;
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException e) {
@@ -41,6 +44,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
         log.error("처리되지 않은 예외 발생", e);
+        ntfyNotifier.notifyUnexpectedError(e.getClass().getSimpleName() + ": " + e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.of(500, "Internal Server Error", "서버 오류 발생"));
