@@ -62,6 +62,30 @@ class PostRepositoryTest {
     }
 
     @Test
+    void findAllOrderByLikeCountDesc_좋아요가_많은_순으로_정렬한다() {
+        Post postA = em.persistAndFlush(new Post("좋아요 정렬 A", "내용", author));
+        Post postB = em.persistAndFlush(new Post("좋아요 정렬 B", "내용", author));
+        Post postC = em.persistAndFlush(new Post("좋아요 정렬 C", "내용", author));
+
+        User liker1 = em.persistAndFlush(new User("liker1-" + UUID.randomUUID(), "encoded"));
+        User liker2 = em.persistAndFlush(new User("liker2-" + UUID.randomUUID(), "encoded"));
+
+        em.persistAndFlush(new PostLike(postB, liker1));
+        em.persistAndFlush(new PostLike(postB, liker2));
+        em.persistAndFlush(new PostLike(postC, liker1));
+        // postA는 좋아요 없음
+
+        Page<Post> result = postRepository.findAllOrderByLikeCountDesc(PageRequest.of(0, 10));
+
+        // Replace.NONE으로 기존 데이터가 섞여 있을 수 있으니, 우리가 만든 세 글의 상대적 순서만 확인한다.
+        var orderOfOurPosts = result.getContent().stream()
+                .map(Post::getId)
+                .filter(id -> id.equals(postA.getId()) || id.equals(postB.getId()) || id.equals(postC.getId()))
+                .toList();
+        assertThat(orderOfOurPosts).containsExactly(postB.getId(), postC.getId(), postA.getId());
+    }
+
+    @Test
     void findAll_페이지가_요청한_크기만큼만_반환된다() {
         // Replace.NONE으로 개발 DB를 그대로 쓰므로, 기존에 남아있을 수 있는 데이터를 감안해 상대적으로 검증한다.
         long before = postRepository.count();

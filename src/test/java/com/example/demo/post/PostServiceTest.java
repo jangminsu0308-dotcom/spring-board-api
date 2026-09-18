@@ -111,6 +111,28 @@ class PostServiceTest {
     }
 
     @Test
+    void findAll_sort가_popular면_좋아요_많은_순_전용_쿼리를_사용한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.findAllOrderByLikeCountDesc(any(Pageable.class))).thenReturn(page);
+
+        postService.findAll(0, 10, null, "popular", null);
+
+        verify(postRepository).findAllOrderByLikeCountDesc(any(Pageable.class));
+        verify(postRepository, never()).findAll(any(Pageable.class));
+    }
+
+    @Test
+    void findAll_sort가_popular이고_키워드가_있으면_검색_겸용_쿼리를_사용한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.findByTitleContainingIgnoreCaseOrderByLikeCountDesc(eq("제목"), any(Pageable.class)))
+                .thenReturn(page);
+
+        postService.findAll(0, 10, "제목", "popular", null);
+
+        verify(postRepository).findByTitleContainingIgnoreCaseOrderByLikeCountDesc(eq("제목"), any(Pageable.class));
+    }
+
+    @Test
     void findAll_로그인한_사용자가_좋아요한_글은_likedByMe가_true다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
         when(postRepository.findAll(any(Pageable.class))).thenReturn(page);

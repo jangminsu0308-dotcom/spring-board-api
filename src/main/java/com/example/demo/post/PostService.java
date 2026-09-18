@@ -37,14 +37,23 @@ public class PostService {
 	private static final int MAX_PAGE_SIZE = 100;
 
 	public PostDto.PageResponse findAll(int page, int size, String keyword, String sort, String username) {
-		Pageable pageable = PageRequest.of(
-				Math.max(page, 0),
-				Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
-				sortFor(sort));
+		int pageNum = Math.max(page, 0);
+		int pageSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+		boolean hasKeyword = keyword != null && !keyword.isBlank();
 
-		Page<Post> result = (keyword == null || keyword.isBlank())
-				? postRepository.findAll(pageable)
-				: postRepository.findByTitleContainingIgnoreCase(keyword, pageable);
+		Page<Post> result;
+		if ("popular".equals(sort)) {
+			// 좋아요 개수로 정렬하는 쿼리가 직접 ORDER BY를 만들므로, Pageable에는 정렬을 싣지 않는다.
+			Pageable pageable = PageRequest.of(pageNum, pageSize);
+			result = hasKeyword
+					? postRepository.findByTitleContainingIgnoreCaseOrderByLikeCountDesc(keyword, pageable)
+					: postRepository.findAllOrderByLikeCountDesc(pageable);
+		} else {
+			Pageable pageable = PageRequest.of(pageNum, pageSize, sortFor(sort));
+			result = hasKeyword
+					? postRepository.findByTitleContainingIgnoreCase(keyword, pageable)
+					: postRepository.findAll(pageable);
+		}
 
 		List<Long> postIds = result.getContent().stream().map(Post::getId).toList();
 
