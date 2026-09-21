@@ -662,6 +662,9 @@ function renderAuthBar() {
     currentMine = false;
     el('mine-toggle').setAttribute('aria-pressed', 'false');
     el('mine-toggle').classList.remove('active');
+    // 로그아웃으로 필터가 강제로 풀렸는데 목록 화면이 떠 있으면, 화면에는
+    // 여전히 "내 글만" 필터링된 결과가 남아있어 실제 상태와 어긋난다 — 다시 불러온다.
+    if (!el('view-list').hidden) loadList(0);
   }
 }
 
