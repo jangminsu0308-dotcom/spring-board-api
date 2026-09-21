@@ -42,23 +42,22 @@ public class PostService {
 
 	private static final int MAX_PAGE_SIZE = 100;
 
-	public PostDto.PageResponse findAll(int page, int size, String keyword, String sort, String username) {
+	public PostDto.PageResponse findAll(int page, int size, String keyword, String sort, boolean mine, String username) {
 		int pageNum = Math.max(page, 0);
 		int pageSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-		boolean hasKeyword = keyword != null && !keyword.isBlank();
+		// 리포지토리 쿼리는 "필터가 없으면 null"을 기대한다 — 빈 문자열이 아니라 null이어야
+		// ":keyword IS NULL OR ..." 패턴이 "필터 없음"으로 인식된다.
+		String searchKeyword = (keyword == null || keyword.isBlank()) ? null : keyword;
+		String authorFilter = (mine && username != null) ? username : null;
 
 		Page<Post> result;
 		if ("popular".equals(sort)) {
 			// 좋아요 개수로 정렬하는 쿼리가 직접 ORDER BY를 만들므로, Pageable에는 정렬을 싣지 않는다.
 			Pageable pageable = PageRequest.of(pageNum, pageSize);
-			result = hasKeyword
-					? postRepository.findByTitleContainingIgnoreCaseOrderByLikeCountDesc(keyword, pageable)
-					: postRepository.findAllOrderByLikeCountDesc(pageable);
+			result = postRepository.searchOrderByLikeCountDesc(searchKeyword, authorFilter, pageable);
 		} else {
 			Pageable pageable = PageRequest.of(pageNum, pageSize, sortFor(sort));
-			result = hasKeyword
-					? postRepository.findByTitleContainingIgnoreCase(keyword, pageable)
-					: postRepository.findAll(pageable);
+			result = postRepository.search(searchKeyword, authorFilter, pageable);
 		}
 
 		List<Long> postIds = result.getContent().stream().map(Post::getId).toList();

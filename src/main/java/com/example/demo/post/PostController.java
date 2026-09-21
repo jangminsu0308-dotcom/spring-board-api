@@ -29,7 +29,8 @@ public class PostController {
         return ResponseEntity.created(URI.create("/api/posts/" + response.id())).body(response);
     }
 
-    @Operation(summary = "게시글 목록 조회", description = "page(0부터), size, keyword(제목 검색), sort(latest/oldest/title)로 조회합니다. "
+    @Operation(summary = "게시글 목록 조회", description = "page(0부터), size, keyword(제목+본문 검색), sort(latest/oldest/title/popular)로 조회합니다. "
+            + "mine=true면 로그인한 사용자가 작성한 글만 보여줍니다(비로그인이면 무시됩니다). "
             + "로그인 상태로 요청하면 각 게시글에 내가 좋아요를 눌렀는지(likedByMe)도 함께 내려줍니다.")
     @GetMapping
     public PostDto.PageResponse findAll(
@@ -37,8 +38,9 @@ public class PostController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "latest") String sort,
+            @RequestParam(defaultValue = "false") boolean mine,
             Authentication authentication) {
-        return postService.findAll(page, size, keyword, sort, usernameOrNull(authentication));
+        return postService.findAll(page, size, keyword, sort, mine, usernameOrNull(authentication));
     }
 
     @Operation(summary = "게시글 단건 조회")

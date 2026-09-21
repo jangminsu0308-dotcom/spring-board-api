@@ -90,9 +90,9 @@ class PostServiceTest {
     @Test
     void findAll_키워드가_없으면_전체_목록을_페이지로_반환한다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
-        when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
+        when(postRepository.search(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
 
-        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", null);
+        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", false, null);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).id()).isEqualTo(1L);
@@ -101,24 +101,53 @@ class PostServiceTest {
     }
 
     @Test
-    void findAll_키워드가_있으면_제목으로_검색한다() {
+    void findAll_키워드가_있으면_제목_또는_본문으로_검색한다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
-        when(postRepository.findByTitleContainingIgnoreCase(eq("제목"), any(Pageable.class))).thenReturn(page);
+        when(postRepository.search(eq("제목"), isNull(), any(Pageable.class))).thenReturn(page);
 
-        PostDto.PageResponse result = postService.findAll(0, 10, "제목", "latest", null);
+        PostDto.PageResponse result = postService.findAll(0, 10, "제목", "latest", false, null);
 
         assertThat(result.content()).hasSize(1);
-        verify(postRepository).findByTitleContainingIgnoreCase(eq("제목"), any(Pageable.class));
-        verify(postRepository, never()).findAll(any(Pageable.class));
+        verify(postRepository).search(eq("제목"), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void findAll_공백_키워드는_필터_없음으로_취급한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.search(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
+
+        postService.findAll(0, 10, "   ", "latest", false, null);
+
+        verify(postRepository).search(isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void findAll_mine이_true면_로그인한_사용자_글만_필터링한다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.search(isNull(), eq("writer"), any(Pageable.class))).thenReturn(page);
+
+        postService.findAll(0, 10, null, "latest", true, "writer");
+
+        verify(postRepository).search(isNull(), eq("writer"), any(Pageable.class));
+    }
+
+    @Test
+    void findAll_mine이_true여도_비로그인이면_필터를_적용하지_않는다() {
+        Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
+        when(postRepository.search(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
+
+        postService.findAll(0, 10, null, "latest", true, null);
+
+        verify(postRepository).search(isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
     void findAll_sort가_oldest면_id_오름차순으로_정렬한다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        when(postRepository.findAll(pageableCaptor.capture())).thenReturn(page);
+        when(postRepository.search(isNull(), isNull(), pageableCaptor.capture())).thenReturn(page);
 
-        postService.findAll(0, 10, null, "oldest", null);
+        postService.findAll(0, 10, null, "oldest", false, null);
 
         Sort.Order order = pageableCaptor.getValue().getSort().getOrderFor("id");
         assertThat(order).isNotNull();
@@ -128,34 +157,34 @@ class PostServiceTest {
     @Test
     void findAll_sort가_popular면_좋아요_많은_순_전용_쿼리를_사용한다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
-        when(postRepository.findAllOrderByLikeCountDesc(any(Pageable.class))).thenReturn(page);
+        when(postRepository.searchOrderByLikeCountDesc(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
 
-        postService.findAll(0, 10, null, "popular", null);
+        postService.findAll(0, 10, null, "popular", false, null);
 
-        verify(postRepository).findAllOrderByLikeCountDesc(any(Pageable.class));
-        verify(postRepository, never()).findAll(any(Pageable.class));
+        verify(postRepository).searchOrderByLikeCountDesc(isNull(), isNull(), any(Pageable.class));
+        verify(postRepository, never()).search(any(), any(), any());
     }
 
     @Test
     void findAll_sort가_popular이고_키워드가_있으면_검색_겸용_쿼리를_사용한다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
-        when(postRepository.findByTitleContainingIgnoreCaseOrderByLikeCountDesc(eq("제목"), any(Pageable.class)))
+        when(postRepository.searchOrderByLikeCountDesc(eq("제목"), isNull(), any(Pageable.class)))
                 .thenReturn(page);
 
-        postService.findAll(0, 10, "제목", "popular", null);
+        postService.findAll(0, 10, "제목", "popular", false, null);
 
-        verify(postRepository).findByTitleContainingIgnoreCaseOrderByLikeCountDesc(eq("제목"), any(Pageable.class));
+        verify(postRepository).searchOrderByLikeCountDesc(eq("제목"), isNull(), any(Pageable.class));
     }
 
     @Test
     void findAll_로그인한_사용자가_좋아요한_글은_likedByMe가_true다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
-        when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
+        when(postRepository.search(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
         when(postLikeRepository.findLikedPostIds("writer", List.of(1L))).thenReturn(List.of(1L));
         when(postLikeRepository.countGroupedByPostIds(List.of(1L)))
                 .thenReturn(List.<Object[]>of(new Object[]{1L, 3L}));
 
-        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", "writer");
+        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", false, "writer");
 
         assertThat(result.content().get(0).likedByMe()).isTrue();
         assertThat(result.content().get(0).likeCount()).isEqualTo(3L);
@@ -164,9 +193,9 @@ class PostServiceTest {
     @Test
     void findAll_비로그인이면_likedByMe_조회_자체를_하지_않는다() {
         Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1);
-        when(postRepository.findAll(any(Pageable.class))).thenReturn(page);
+        when(postRepository.search(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
 
-        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", null);
+        PostDto.PageResponse result = postService.findAll(0, 10, null, "latest", false, null);
 
         assertThat(result.content().get(0).likedByMe()).isFalse();
         verify(postLikeRepository, never()).findLikedPostIds(any(), any());

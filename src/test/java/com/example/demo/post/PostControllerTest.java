@@ -81,7 +81,7 @@ class PostControllerTest {
     @Test
     void 게시글_목록_조회() throws Exception {
         PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(response(1L, "제목", "내용", "writer")), 0, 10, 1, 1);
-        when(postService.findAll(0, 10, null, "latest", null)).thenReturn(pageResponse);
+        when(postService.findAll(0, 10, null, "latest", false, null)).thenReturn(pageResponse);
 
         mockMvc.perform(get("/api/posts"))
                 .andExpect(status().isOk())
@@ -92,7 +92,7 @@ class PostControllerTest {
     @Test
     void 게시글_목록_조회시_page_size_keyword_sort를_그대로_전달한다() throws Exception {
         PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(), 2, 5, 0, 0);
-        when(postService.findAll(2, 5, "제목", "oldest", null)).thenReturn(pageResponse);
+        when(postService.findAll(2, 5, "제목", "oldest", false, null)).thenReturn(pageResponse);
 
         mockMvc.perform(get("/api/posts").param("page", "2").param("size", "5")
                         .param("keyword", "제목").param("sort", "oldest"))
@@ -100,18 +100,29 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.page").value(2))
                 .andExpect(jsonPath("$.size").value(5));
 
-        verify(postService).findAll(2, 5, "제목", "oldest", null);
+        verify(postService).findAll(2, 5, "제목", "oldest", false, null);
     }
 
     @Test
     void 게시글_목록_조회시_로그인_상태면_사용자명을_함께_전달한다() throws Exception {
         PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(), 0, 10, 0, 0);
-        when(postService.findAll(0, 10, null, "latest", "writer")).thenReturn(pageResponse);
+        when(postService.findAll(0, 10, null, "latest", false, "writer")).thenReturn(pageResponse);
 
         mockMvc.perform(get("/api/posts").with(user("writer")))
                 .andExpect(status().isOk());
 
-        verify(postService).findAll(0, 10, null, "latest", "writer");
+        verify(postService).findAll(0, 10, null, "latest", false, "writer");
+    }
+
+    @Test
+    void 게시글_목록_조회시_mine_파라미터를_그대로_전달한다() throws Exception {
+        PostDto.PageResponse pageResponse = new PostDto.PageResponse(List.of(), 0, 10, 0, 0);
+        when(postService.findAll(0, 10, null, "latest", true, "writer")).thenReturn(pageResponse);
+
+        mockMvc.perform(get("/api/posts").param("mine", "true").with(user("writer")))
+                .andExpect(status().isOk());
+
+        verify(postService).findAll(0, 10, null, "latest", true, "writer");
     }
 
     @Test
