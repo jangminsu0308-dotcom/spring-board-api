@@ -4,6 +4,7 @@ import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
 import com.example.demo.common.RateLimiterService;
 import com.example.demo.common.TooManyRequestsException;
+import com.example.demo.common.ViewCountGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +46,9 @@ class PostServiceTest {
 
     @Mock
     private RateLimiterService rateLimiter;
+
+    @Mock
+    private ViewCountGuard viewCountGuard;
 
     @InjectMocks
     private PostService postService;
@@ -204,8 +208,9 @@ class PostServiceTest {
     @Test
     void findById_존재하면_응답을_반환한다() {
         when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(viewCountGuard.shouldCount(1L, "1.2.3.4")).thenReturn(true);
 
-        PostDto.Response response = postService.findById(1L, null);
+        PostDto.Response response = postService.findById(1L, null, "1.2.3.4");
 
         assertThat(response.title()).isEqualTo("제목");
     }
@@ -214,8 +219,28 @@ class PostServiceTest {
     void findById_존재하지_않으면_예외를_던진다() {
         when(postRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> postService.findById(999L, null))
+        assertThatThrownBy(() -> postService.findById(999L, null, "1.2.3.4"))
                 .isInstanceOf(PostNotFoundException.class);
+    }
+
+    @Test
+    void findById_조회하면_조회수가_증가한다() {
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(viewCountGuard.shouldCount(1L, "writer")).thenReturn(true);
+
+        PostDto.Response response = postService.findById(1L, "writer", "writer");
+
+        assertThat(response.viewCount()).isEqualTo(1L);
+    }
+
+    @Test
+    void findById_짧은_시간_안에_같은_조회자가_다시_보면_조회수가_증가하지_않는다() {
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(viewCountGuard.shouldCount(1L, "writer")).thenReturn(false);
+
+        PostDto.Response response = postService.findById(1L, "writer", "writer");
+
+        assertThat(response.viewCount()).isZero();
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -43,10 +44,12 @@ public class PostController {
         return postService.findAll(page, size, keyword, sort, mine, usernameOrNull(authentication));
     }
 
-    @Operation(summary = "게시글 단건 조회")
+    @Operation(summary = "게시글 단건 조회", description = "조회할 때마다 조회수가 1 증가합니다(같은 사람이 짧은 시간 안에 다시 보면 중복으로 세지 않습니다).")
     @GetMapping("/{id}")
-    public PostDto.Response findById(@PathVariable Long id, Authentication authentication) {
-        return postService.findById(id, usernameOrNull(authentication));
+    public PostDto.Response findById(@PathVariable Long id, Authentication authentication, HttpServletRequest request) {
+        String username = usernameOrNull(authentication);
+        String viewerKey = username != null ? username : request.getRemoteAddr();
+        return postService.findById(id, username, viewerKey);
     }
 
     @Operation(summary = "게시글 수정", description = "본인이 작성한 게시글만 수정할 수 있습니다.")

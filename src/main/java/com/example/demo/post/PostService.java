@@ -3,6 +3,7 @@ package com.example.demo.post;
 import com.example.demo.auth.User;
 import com.example.demo.auth.UserRepository;
 import com.example.demo.common.RateLimiterService;
+import com.example.demo.common.ViewCountGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +30,7 @@ public class PostService {
 	private final PostLikeRepository postLikeRepository;
 	private final CommentRepository commentRepository;
 	private final RateLimiterService rateLimiter;
+	private final ViewCountGuard viewCountGuard;
 
 	private static final int MAX_POSTS_PER_MINUTE = 5;
 
@@ -47,7 +49,10 @@ public class PostService {
 		int pageSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
 		// 리포지토리 쿼리는 "필터가 없으면 null"을 기대한다 — 빈 문자열이 아니라 null이어야
 		// ":keyword IS NULL OR ..." 패턴이 "필터 없음"으로 인식된다.
-		String searchKeyword = (keyword == null || keyword.isBlank()) ? null : keyword;
+		// 검색어를 이중 인용부호로 감싸 phrase search로 보내므로(PostRepository 참고), 검색어
+		// 안에 있는 "는 미리 제거한다 — 안 그러면 인용부호 개수가 안 맞아 MySQL 쪽에서 문법 오류가 난다.
+		String sanitizedKeyword = keyword == null ? null : keyword.replace("\"", "").trim();
+		String searchKeyword = (sanitizedKeyword == null || sanitizedKeyword.isBlank()) ? null : sanitizedKeyword;
 		String authorFilter = (mine && username != null) ? username : null;
 
 		Page<Post> result;
@@ -61,6 +66,14 @@ public class PostService {
 		}
 
 		List<Long> postIds = result.getContent().stream().map(Post::getId).toList();
+
+		// search()/searchOrderByLikeCountDesc()가 네이티브 쿼리라 @EntityGraph로 author를 함께
+		// 로딩할 수 없다(author는 지연 로딩 프록시로 남는다). 이 페이지에 나온 author id를 모아
+		// 한 번에 findAllById로 조회해두면, 그 결과가 영속성 컨텍스트(세션)에 올라가면서 이후
+		// post.getAuthor().getUsername() 호출이 DB를 다시 안 타고 세션에서 바로 해석된다 —
+		// getAuthor().getId()는 프록시가 이미 알고 있는 값이라 이 시점에는 쿼리가 나가지 않는다.
+		List<Long> authorIds = result.getContent().stream().map(post -> post.getAuthor().getId()).distinct().toList();
+		userRepository.findAllById(authorIds);
 
 		// 좋아요·댓글 개수를 게시글마다 따로 조회하면 페이지당 1+N번이 된다(6장/13장의 N+1과 같은 문제).
 		// 이 페이지에 있는 post id 전체를 한 번에 묶어 쿼리 1~2번으로 끝낸다.
@@ -97,9 +110,13 @@ public class PostService {
 		return map;
 	}
 
-	public PostDto.Response findById(Long id, String username) {
+	@Transactional
+	public PostDto.Response findById(Long id, String username, String viewerKey) {
 		Post post = postRepository.findById(id)
 			.orElseThrow(() -> new PostNotFoundException(id));
+		if (viewCountGuard.shouldCount(id, viewerKey)) {
+			post.increaseViewCount();
+		}
 		return toResponse(post, username);
 	}
 

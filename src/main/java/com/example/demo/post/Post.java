@@ -36,12 +36,19 @@ public class Post {
 
 	private LocalDateTime updatedAt;
 
+	@Column(nullable = false)
+	private long viewCount = 0;
+
 	public Post(String title, String content, User author) {
 		this.title = title;
 		this.content = content;
 		this.author = author;
 	}
-	
+
+	public void increaseViewCount() {
+		this.viewCount++;
+	}
+
 	@PrePersist
 	void onCreate() {
 		this.createdAt = LocalDateTime.now();

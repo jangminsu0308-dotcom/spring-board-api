@@ -1,6 +1,7 @@
 package com.example.demo.post;
 
 import com.example.demo.auth.User;
+import com.example.demo.auth.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +10,10 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.test.context.transaction.TestTransaction;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,38 +33,54 @@ class PostRepositoryTest {
     @Autowired
     private PostRepository postRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     private User author;
 
     @BeforeEach
     void setUp() {
-        author = em.persistAndFlush(new User("writer", "encoded"));
+        // 아래 fulltext 테스트들은 검증을 위해 실제로 커밋한다(이유는 메서드 주석 참고) —
+        // 이름이 고정돼 있으면 커밋된 이전 실행의 흔적이 남아있을 때 유니크 제약에 걸리므로
+        // author도 매번 고유한 이름으로 만든다.
+        author = em.persistAndFlush(new User("writer-" + UUID.randomUUID(), "encoded"));
     }
 
     @Test
     void search_대소문자를_무시하고_제목_부분일치로_검색한다() {
         // 기존 DB 데이터와 절대 겹치지 않도록 매 실행마다 고유한 마커를 키워드로 쓴다.
         String marker = "MARKER-" + UUID.randomUUID();
-        em.persistAndFlush(new Post(marker.toUpperCase() + " Boot 시작하기", "내용1", author));
-        em.persistAndFlush(new Post(marker.toLowerCase() + " security 설정", "내용2", author));
-        em.persistAndFlush(new Post("전혀 다른 제목", "내용3", author));
+        Post p1 = em.persistAndFlush(new Post(marker.toUpperCase() + " Boot 시작하기", "내용1", author));
+        Post p2 = em.persistAndFlush(new Post(marker.toLowerCase() + " security 설정", "내용2", author));
+        Post p3 = em.persistAndFlush(new Post("전혀 다른 제목", "내용3", author));
+        commitForFulltextVisibility();
 
-        Page<Post> result = postRepository.search(marker, null, PageRequest.of(0, 10));
+        try {
+            Page<Post> result = postRepository.search(marker, null, PageRequest.of(0, 10));
 
-        assertThat(result.getTotalElements()).isEqualTo(2);
-        assertThat(result.getContent()).extracting(Post::getTitle)
-                .allSatisfy(title -> assertThat(title.toUpperCase()).contains(marker.toUpperCase()));
+            assertThat(result.getTotalElements()).isEqualTo(2);
+            assertThat(result.getContent()).extracting(Post::getTitle)
+                    .allSatisfy(title -> assertThat(title.toUpperCase()).contains(marker.toUpperCase()));
+        } finally {
+            cleanUpCommittedData(List.of(p1.getId(), p2.getId(), p3.getId()));
+        }
     }
 
     @Test
     void search_제목에_없어도_본문에_있으면_찾는다() {
         String marker = "MARKER-" + UUID.randomUUID();
-        em.persistAndFlush(new Post("평범한 제목", marker + " 라는 내용이 본문에만 있음", author));
-        em.persistAndFlush(new Post("전혀 다른 제목", "전혀 다른 내용", author));
+        Post p1 = em.persistAndFlush(new Post("평범한 제목", marker + " 라는 내용이 본문에만 있음", author));
+        Post p2 = em.persistAndFlush(new Post("전혀 다른 제목", "전혀 다른 내용", author));
+        commitForFulltextVisibility();
 
-        Page<Post> result = postRepository.search(marker, null, PageRequest.of(0, 10));
+        try {
+            Page<Post> result = postRepository.search(marker, null, PageRequest.of(0, 10));
 
-        assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent().get(0).getContent()).contains(marker);
+            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent().get(0).getContent()).contains(marker);
+        } finally {
+            cleanUpCommittedData(List.of(p1.getId(), p2.getId()));
+        }
     }
 
     @Test
@@ -78,11 +98,32 @@ class PostRepositoryTest {
         String marker = "MARKER-" + UUID.randomUUID();
         User other = em.persistAndFlush(new User("other-" + UUID.randomUUID(), "encoded"));
         Post mine = em.persistAndFlush(new Post(marker, "내용", author));
-        em.persistAndFlush(new Post(marker, "내용", other));
+        Post othersPost = em.persistAndFlush(new Post(marker, "내용", other));
+        commitForFulltextVisibility();
 
-        Page<Post> result = postRepository.search(marker, author.getUsername(), PageRequest.of(0, 10));
+        try {
+            Page<Post> result = postRepository.search(marker, author.getUsername(), PageRequest.of(0, 10));
 
-        assertThat(result.getContent()).extracting(Post::getId).containsExactly(mine.getId());
+            assertThat(result.getContent()).extracting(Post::getId).containsExactly(mine.getId());
+        } finally {
+            cleanUpCommittedData(List.of(mine.getId(), othersPost.getId()), other);
+        }
+    }
+
+    @Test
+    void search_Pageable에_담긴_정렬을_그대로_적용한다() {
+        // search()가 네이티브 쿼리로 바뀌면서, Spring Data가 Pageable의 Sort를 네이티브 쿼리에도
+        // 여전히 적용해주는지 실제로 확인해야 한다(JPQL과 달리 보장이 당연하지 않다).
+        // 키워드 없이 username으로만 좁혀서 fulltext 커밋 이슈 없이 순서만 검증한다.
+        Post p1 = em.persistAndFlush(new Post("정렬 테스트 1", "내용", author));
+        Post p2 = em.persistAndFlush(new Post("정렬 테스트 2", "내용", author));
+        Post p3 = em.persistAndFlush(new Post("정렬 테스트 3", "내용", author));
+
+        Page<Post> oldest = postRepository.search(null, author.getUsername(),
+                PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "id")));
+
+        assertThat(oldest.getContent()).extracting(Post::getId)
+                .containsExactly(p1.getId(), p2.getId(), p3.getId());
     }
 
     @Test
@@ -121,5 +162,29 @@ class PostRepositoryTest {
 
         assertThat(firstPage.getContent()).hasSize(10);
         assertThat(firstPage.getTotalElements()).isEqualTo(before + 15);
+    }
+
+    /**
+     * InnoDB FULLTEXT 인덱스는 "커밋된" 행만 MATCH ... AGAINST에 잡힌다 — 같은 트랜잭션 안에서
+     * 방금 insert한 행이라도 커밋 전에는 fulltext 검색 결과에 보이지 않는다(LIKE는 이 제약이 없다).
+     * @DataJpaTest는 테스트마다 트랜잭션 하나를 열고 끝나면 롤백하므로, fulltext 검색 결과를
+     * 검증하려면 그 안에서 한 번 실제로 커밋해야 한다 — 자동 롤백을 못 쓰게 되는 대신이라,
+     * cleanUp()에서 만든 데이터를 직접 지운다.
+     */
+    private void commitForFulltextVisibility() {
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+    }
+
+    // 삭제를 전부 마친 다음에 TestTransaction.start()를 불러야 한다 — 순서를 바꿔서 삭제를
+    // 새로 시작한 트랜잭션 안에서 하면, 그 트랜잭션은 테스트가 끝나며 롤백돼 삭제 자체가
+    // 취소되고 커밋된 데이터가 DB에 그대로 남는다.
+    private void cleanUpCommittedData(List<Long> postIds, User... extraUsers) {
+        postRepository.deleteAllById(postIds);
+        userRepository.delete(author);
+        for (User user : extraUsers) {
+            userRepository.delete(user);
+        }
+        TestTransaction.start();
     }
 }

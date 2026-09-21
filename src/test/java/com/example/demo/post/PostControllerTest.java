@@ -39,7 +39,7 @@ class PostControllerTest {
     private PostService postService;
 
     private static PostDto.Response response(Long id, String title, String content, String author) {
-        return new PostDto.Response(id, title, content, author, LocalDateTime.now(), LocalDateTime.now(), 0, false, 0);
+        return new PostDto.Response(id, title, content, author, LocalDateTime.now(), LocalDateTime.now(), 0, false, 0, 0);
     }
 
     @Test
@@ -127,12 +127,32 @@ class PostControllerTest {
 
     @Test
     void 존재하지_않는_게시글_조회시_404를_반환한다() throws Exception {
-        when(postService.findById(eq(999L), isNull())).thenThrow(new PostNotFoundException(999L));
+        when(postService.findById(eq(999L), isNull(), any())).thenThrow(new PostNotFoundException(999L));
 
         mockMvc.perform(get("/api/posts/999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("게시글을 찾을 수 없습니다: 999"));
+    }
+
+    @Test
+    void 게시글_조회시_로그인_상태면_조회수_중복_판단_기준으로_사용자명을_쓴다() throws Exception {
+        when(postService.findById(1L, "writer", "writer")).thenReturn(response(1L, "제목", "내용", "writer"));
+
+        mockMvc.perform(get("/api/posts/1").with(user("writer")))
+                .andExpect(status().isOk());
+
+        verify(postService).findById(1L, "writer", "writer");
+    }
+
+    @Test
+    void 게시글_조회시_비로그인이면_조회수_중복_판단_기준으로_클라이언트_주소를_쓴다() throws Exception {
+        when(postService.findById(eq(1L), isNull(), any())).thenReturn(response(1L, "제목", "내용", "writer"));
+
+        mockMvc.perform(get("/api/posts/1"))
+                .andExpect(status().isOk());
+
+        verify(postService).findById(eq(1L), isNull(), eq("127.0.0.1"));
     }
 
     @Test

@@ -25,10 +25,12 @@ public class PostDto {
 		LocalDateTime updatedAt,
 		long likeCount,
 		boolean likedByMe,
-		long commentCount
+		long commentCount,
+		long viewCount
 	) {
 		// 좋아요·댓글 개수는 Post 엔티티만으로는 알 수 없다(별도 테이블 집계가 필요) —
-		// 그래서 from(Post)이 아니라 이미 집계해온 값을 그대로 받는다.
+		// 그래서 from(Post)이 아니라 이미 집계해온 값을 그대로 받는다. viewCount는 Post 자신의
+		// 컬럼이라 별도 집계 없이 post.getViewCount()를 그대로 쓴다.
 		static Response from(Post post, long likeCount, boolean likedByMe, long commentCount) {
 			return new Response(
 				post.getId(),
@@ -39,7 +41,8 @@ public class PostDto {
 				post.getUpdatedAt(),
 				likeCount,
 				likedByMe,
-				commentCount
+				commentCount,
+				post.getViewCount()
 			);
 		}
 	}

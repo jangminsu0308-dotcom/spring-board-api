@@ -547,6 +547,7 @@ const ICONS = {
   heart: svgIcon('<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>', 14),
   message: svgIcon('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>', 14),
   user: svgIcon('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>', 13),
+  eye: svgIcon('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>', 14),
 };
 
 el('btn-new-post').innerHTML = `${ICONS.plus}글쓰기`;
@@ -815,6 +816,7 @@ async function loadList(page = currentPage) {
         <div class="post-stats">
           <button class="like-btn"></button>
           <span class="stat">${ICONS.message}<span></span></span>
+          <span class="stat">${ICONS.eye}<span></span></span>
         </div>
         <span class="post-arrow">${ICONS.arrowRight}</span>
       `;
@@ -825,6 +827,7 @@ async function loadList(page = currentPage) {
       metaText.textContent = `${post.author} · ${fmt(post.createdAt)}`;
       meta.appendChild(metaText);
       item.querySelector('.post-excerpt').textContent = post.content;
+      item.querySelectorAll('.stat span')[1].textContent = post.viewCount;
 
       const likeBtn = item.querySelector('.like-btn');
       renderLikeButton(likeBtn, post.likeCount, post.likedByMe);
@@ -1041,6 +1044,7 @@ async function renderDetail() {
     <div class="post-stats">
       <button class="like-btn" id="detail-like-btn"></button>
       <span class="stat">${ICONS.message}<span id="detail-comment-count"></span></span>
+      <span class="stat">${ICONS.eye}<span id="detail-view-count"></span></span>
     </div>
     <div class="detail-actions">
       <button class="secondary" id="btn-edit-post">${ICONS.edit}수정</button>
@@ -1059,6 +1063,7 @@ async function renderDetail() {
   renderLikeButton(detailLikeBtn, post.likeCount, post.likedByMe);
   detailLikeBtn.addEventListener('click', () => handleLikeClick(detailLikeBtn, post.id));
   card.querySelector('#detail-comment-count').textContent = post.commentCount;
+  card.querySelector('#detail-view-count').textContent = post.viewCount;
 
   const isOwner = getUsername() === post.author;
   card.querySelector('#btn-edit-post').hidden = !isOwner;
