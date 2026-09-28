@@ -8,10 +8,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import static com.example.demo.common.OpenApiConfig.BEARER_AUTH;
@@ -55,6 +57,25 @@ public class AuthController {
     @PutMapping("/password")
     public ResponseEntity<Void> changePassword(@Valid @RequestBody AuthDto.ChangePasswordRequest request, Authentication authentication) {
         authService.changePassword(authentication.getName(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "비밀번호 찾기 - 보안 질문 조회", description = "가입 시 등록한 보안 질문을 보여줍니다. 로그인 없이 호출합니다.")
+    @GetMapping("/password-reset/question")
+    public AuthDto.SecurityQuestionResponse getSecurityQuestion(@RequestParam String username) {
+        return authService.getSecurityQuestion(username);
+    }
+
+    @Operation(summary = "비밀번호 찾기 - 답변 확인", description = "보안 질문 답변이 맞으면 10분간 유효한 재설정 토큰을 발급합니다.")
+    @PostMapping("/password-reset/verify")
+    public AuthDto.ResetTokenResponse verifySecurityAnswer(@Valid @RequestBody AuthDto.VerifySecurityAnswerRequest request) {
+        return authService.verifySecurityAnswer(request);
+    }
+
+    @Operation(summary = "비밀번호 찾기 - 재설정", description = "재설정 토큰으로 새 비밀번호를 설정합니다. 모든 기기의 로그인 세션이 함께 종료됩니다.")
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody AuthDto.ResetPasswordRequest request) {
+        authService.resetPassword(request);
         return ResponseEntity.noContent().build();
     }
 }

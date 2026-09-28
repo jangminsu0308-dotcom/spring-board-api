@@ -19,6 +19,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,7 +41,7 @@ class AuthControllerTest {
     void 회원가입_성공시_201을_반환한다() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthDto.RegisterRequest("writer", "password123"))))
+                        .content(objectMapper.writeValueAsString(new AuthDto.RegisterRequest("writer", "password123", "질문", "답변"))))
                 .andExpect(status().isCreated());
     }
 
@@ -50,7 +51,7 @@ class AuthControllerTest {
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthDto.RegisterRequest("writer", "password123"))))
+                        .content(objectMapper.writeValueAsString(new AuthDto.RegisterRequest("writer", "password123", "질문", "답변"))))
                 .andExpect(status().isConflict());
     }
 
@@ -58,7 +59,7 @@ class AuthControllerTest {
     void 회원가입시_비밀번호가_너무_짧으면_400을_반환한다() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new AuthDto.RegisterRequest("writer", "short"))))
+                        .content(objectMapper.writeValueAsString(new AuthDto.RegisterRequest("writer", "short", "질문", "답변"))))
                 .andExpect(status().isBadRequest());
     }
 
@@ -170,5 +171,68 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new AuthDto.ChangePasswordRequest("password123", "short"))))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 보안질문_조회_성공시_질문을_반환한다() throws Exception {
+        when(authService.getSecurityQuestion("writer"))
+                .thenReturn(new AuthDto.SecurityQuestionResponse("질문"));
+
+        mockMvc.perform(get("/api/auth/password-reset/question").param("username", "writer"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.securityQuestion").value("질문"));
+    }
+
+    @Test
+    void 보안질문_조회시_존재하지_않는_사용자면_404를_반환한다() throws Exception {
+        when(authService.getSecurityQuestion("ghost"))
+                .thenThrow(new UserNotFoundException("ghost"));
+
+        mockMvc.perform(get("/api/auth/password-reset/question").param("username", "ghost"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 보안질문_답변_확인_성공시_재설정_토큰을_반환한다() throws Exception {
+        when(authService.verifySecurityAnswer(any(AuthDto.VerifySecurityAnswerRequest.class)))
+                .thenReturn(new AuthDto.ResetTokenResponse("reset-token"));
+
+        mockMvc.perform(post("/api/auth/password-reset/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.VerifySecurityAnswerRequest("writer", "답변"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resetToken").value("reset-token"));
+    }
+
+    @Test
+    void 보안질문_답변이_틀리면_401을_반환한다() throws Exception {
+        when(authService.verifySecurityAnswer(any(AuthDto.VerifySecurityAnswerRequest.class)))
+                .thenThrow(new InvalidCredentialsException());
+
+        mockMvc.perform(post("/api/auth/password-reset/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.VerifySecurityAnswerRequest("writer", "wrong"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 비밀번호_재설정_성공시_204를_반환한다() throws Exception {
+        mockMvc.perform(post("/api/auth/password-reset/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.ResetPasswordRequest("reset-token", "newpassword123"))))
+                .andExpect(status().isNoContent());
+
+        verify(authService).resetPassword(any(AuthDto.ResetPasswordRequest.class));
+    }
+
+    @Test
+    void 비밀번호_재설정시_토큰이_유효하지_않으면_401을_반환한다() throws Exception {
+        doThrow(new InvalidResetTokenException()).when(authService)
+                .resetPassword(any(AuthDto.ResetPasswordRequest.class));
+
+        mockMvc.perform(post("/api/auth/password-reset/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AuthDto.ResetPasswordRequest("invalid", "newpassword123"))))
+                .andExpect(status().isUnauthorized());
     }
 }

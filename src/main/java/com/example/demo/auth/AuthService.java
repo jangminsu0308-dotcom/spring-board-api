@@ -19,13 +19,20 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginAttemptService loginAttemptService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+
+    private static final Duration RESET_TOKEN_VALIDITY = Duration.ofMinutes(10);
 
     @Transactional
     public void register(AuthDto.RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new DuplicateUsernameException(request.username());
         }
-        User user = new User(request.username(), passwordEncoder.encode(request.password()));
+        User user = new User(
+                request.username(),
+                passwordEncoder.encode(request.password()),
+                request.securityQuestion(),
+                passwordEncoder.encode(request.securityAnswer()));
         userRepository.save(user);
     }
 
@@ -72,6 +79,56 @@ public class AuthService {
         if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
             throw new InvalidCredentialsException();
         }
+        user.changePassword(passwordEncoder.encode(request.newPassword()));
+        refreshTokenRepository.findByUserAndRevokedFalse(user)
+                .forEach(RefreshToken::revoke);
+    }
+
+    /** 비밀번호를 잊었을 때 본인 확인용 질문을 보여준다. 가입 때 등록해두지 않은 계정(V6 이전 가입자)은
+     *  찾을 수 없는 사용자와 똑같이 취급한다 — 어느 쪽이든 이 흐름을 더 진행할 수 없는 건 같다. */
+    public AuthDto.SecurityQuestionResponse getSecurityQuestion(String username) {
+        User user = userRepository.findByUsername(username)
+                .filter(u -> u.getSecurityQuestion() != null)
+                .orElseThrow(() -> new UserNotFoundException(username));
+        return new AuthDto.SecurityQuestionResponse(user.getSecurityQuestion());
+    }
+
+    /** 답변이 맞으면 짧게(10분)만 유효한 재설정 토큰을 발급한다. 로그인 시도 제한과 같은 방식으로
+     *  아이디별 실패 횟수를 세어, 답변을 무차별 대입하는 걸 막는다. */
+    @Transactional
+    public AuthDto.ResetTokenResponse verifySecurityAnswer(AuthDto.VerifySecurityAnswerRequest request) {
+        String lockKey = "reset:" + request.username();
+        loginAttemptService.checkNotLocked(lockKey);
+
+        User user = userRepository.findByUsername(request.username())
+                .filter(u -> u.getSecurityQuestion() != null)
+                .orElseThrow(() -> {
+                    loginAttemptService.recordFailure(lockKey);
+                    return new InvalidCredentialsException();
+                });
+        if (!passwordEncoder.matches(request.securityAnswer(), user.getSecurityAnswerHash())) {
+            loginAttemptService.recordFailure(lockKey);
+            throw new InvalidCredentialsException();
+        }
+        loginAttemptService.recordSuccess(lockKey);
+
+        String tokenValue = jwtTokenProvider.generateRefreshToken();
+        LocalDateTime expiresAt = LocalDateTime.now().plus(RESET_TOKEN_VALIDITY);
+        passwordResetTokenRepository.save(new PasswordResetToken(tokenValue, user, expiresAt));
+        return new AuthDto.ResetTokenResponse(tokenValue);
+    }
+
+    /** 새 비밀번호로 바꾸고, 비밀번호를 바꿀 때와 동일하게 모든 리프레시 토큰을 폐기한다. */
+    @Transactional
+    public void resetPassword(AuthDto.ResetPasswordRequest request) {
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.resetToken())
+                .orElseThrow(InvalidResetTokenException::new);
+        if (!resetToken.isUsable()) {
+            throw new InvalidResetTokenException();
+        }
+        resetToken.markUsed();
+
+        User user = resetToken.getUser();
         user.changePassword(passwordEncoder.encode(request.newPassword()));
         refreshTokenRepository.findByUserAndRevokedFalse(user)
                 .forEach(RefreshToken::revoke);

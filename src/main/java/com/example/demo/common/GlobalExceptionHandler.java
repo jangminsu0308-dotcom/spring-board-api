@@ -3,7 +3,9 @@ package com.example.demo.common;
 import com.example.demo.auth.DuplicateUsernameException;
 import com.example.demo.auth.InvalidCredentialsException;
 import com.example.demo.auth.InvalidRefreshTokenException;
+import com.example.demo.auth.InvalidResetTokenException;
 import com.example.demo.auth.TooManyLoginAttemptsException;
+import com.example.demo.auth.UserNotFoundException;
 import com.example.demo.post.PostNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -100,6 +102,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ErrorResponse.of(401, "Unauthorized", e.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidResetTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidResetToken(InvalidResetTokenException e) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ErrorResponse.of(401, "Unauthorized", e.getMessage()));
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException e) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of(404, "Not Found", e.getMessage()));
     }
 
     @ExceptionHandler(TooManyLoginAttemptsException.class)

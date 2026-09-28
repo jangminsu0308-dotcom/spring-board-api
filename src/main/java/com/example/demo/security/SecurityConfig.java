@@ -34,6 +34,7 @@ public class SecurityConfig {
             .exceptionHandling(e -> e.authenticationEntryPoint(authenticationEntryPoint))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/auth/password-reset/question").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/posts/**").permitAll()
                 .requestMatchers(
                         "/", "/index.html", "/*.css", "/*.js",

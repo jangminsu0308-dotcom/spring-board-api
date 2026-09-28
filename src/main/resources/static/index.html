@@ -137,7 +137,8 @@
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
   textarea { resize: vertical; min-height: 70px; }
-  select { width: auto; flex-shrink: 0; cursor: pointer; }
+  select { cursor: pointer; }
+  #sort-select { width: auto; flex-shrink: 0; }
 
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .row > * { flex: 1; }
@@ -213,6 +214,18 @@
   .empty svg { color: var(--border); }
   .error { color: var(--danger); font-size: 0.85rem; margin: 6px 0; }
   [hidden] { display: none !important; }
+
+  .link-button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    font-size: 0.83rem;
+    text-decoration: underline;
+    cursor: pointer;
+    width: auto;
+  }
+  .step-hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
 
   .auth-bar { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-bottom: 20px; }
   .auth-bar .who { color: var(--muted); margin-right: auto; }
@@ -330,7 +343,7 @@
 </style>
 </head>
 <body>
-<div class="toast-stack" id="toast-stack"></div>
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></div>
 <div class="wrap">
   <div class="auth-bar">
     <span class="who" id="auth-who"></span>
@@ -343,21 +356,58 @@
   <!-- 로그인 폼 -->
   <div class="card" id="login-form" hidden>
     <div class="form-title">로그인</div>
-    <input id="login-username" placeholder="아이디">
-    <input id="login-password" type="password" placeholder="비밀번호">
+    <input id="login-username" placeholder="아이디" aria-label="아이디">
+    <input id="login-password" type="password" placeholder="비밀번호" aria-label="비밀번호">
     <div class="error" id="login-error" hidden></div>
     <div class="row">
       <button id="login-submit">로그인</button>
       <button class="secondary" id="login-cancel">취소</button>
+    </div>
+    <button class="link-button" id="btn-forgot-password" style="margin-top:10px">비밀번호를 잊으셨나요?</button>
+  </div>
+
+  <!-- 비밀번호 재설정 폼 (보안 질문 방식, 3단계) -->
+  <div class="card" id="password-reset-form" hidden>
+    <div class="form-title">비밀번호 찾기</div>
+
+    <div id="reset-step-username">
+      <p class="step-hint">가입할 때 사용한 아이디를 입력하세요.</p>
+      <input id="reset-username" placeholder="아이디" aria-label="아이디">
+      <div class="error" id="reset-username-error" hidden></div>
+      <div class="row">
+        <button id="reset-username-submit">다음</button>
+        <button class="secondary" id="reset-cancel-1">취소</button>
+      </div>
+    </div>
+
+    <div id="reset-step-answer" hidden>
+      <p class="step-hint" id="reset-security-question"></p>
+      <input id="reset-security-answer" placeholder="답변" aria-label="보안 질문 답변">
+      <div class="error" id="reset-answer-error" hidden></div>
+      <div class="row">
+        <button id="reset-answer-submit">확인</button>
+        <button class="secondary" id="reset-cancel-2">취소</button>
+      </div>
+    </div>
+
+    <div id="reset-step-password" hidden>
+      <p class="step-hint">본인 확인이 완료되었습니다. 새 비밀번호를 입력하세요.</p>
+      <input id="reset-new-password" type="password" placeholder="새 비밀번호 (8자 이상)" aria-label="새 비밀번호">
+      <input id="reset-new-password-confirm" type="password" placeholder="새 비밀번호 확인" aria-label="새 비밀번호 확인">
+      <div class="error" id="reset-password-error" hidden></div>
+      <div class="row">
+        <button id="reset-password-submit">비밀번호 변경</button>
+        <button class="secondary" id="reset-cancel-3">취소</button>
+      </div>
     </div>
   </div>
 
   <!-- 비밀번호 변경 폼 -->
   <div class="card" id="change-password-form" hidden>
     <div class="form-title">비밀번호 변경</div>
-    <input id="current-password" type="password" placeholder="현재 비밀번호">
-    <input id="new-password" type="password" placeholder="새 비밀번호 (8자 이상)">
-    <input id="new-password-confirm" type="password" placeholder="새 비밀번호 확인">
+    <input id="current-password" type="password" placeholder="현재 비밀번호" aria-label="현재 비밀번호">
+    <input id="new-password" type="password" placeholder="새 비밀번호 (8자 이상)" aria-label="새 비밀번호">
+    <input id="new-password-confirm" type="password" placeholder="새 비밀번호 확인" aria-label="새 비밀번호 확인">
     <div class="error" id="change-password-error" hidden></div>
     <div class="row">
       <button id="change-password-submit">변경하기</button>
@@ -368,8 +418,17 @@
   <!-- 회원가입 폼 -->
   <div class="card" id="register-form" hidden>
     <div class="form-title">회원가입</div>
-    <input id="register-username" placeholder="아이디 (4자 이상)">
-    <input id="register-password" type="password" placeholder="비밀번호 (8자 이상)">
+    <input id="register-username" placeholder="아이디 (4자 이상)" aria-label="아이디">
+    <input id="register-password" type="password" placeholder="비밀번호 (8자 이상)" aria-label="비밀번호">
+    <p class="step-hint">비밀번호를 잊었을 때 본인 확인에 사용할 보안 질문입니다.</p>
+    <select id="register-security-question" aria-label="보안 질문">
+      <option value="가장 좋아하는 음식은?">가장 좋아하는 음식은?</option>
+      <option value="졸업한 초등학교 이름은?">졸업한 초등학교 이름은?</option>
+      <option value="첫 반려동물의 이름은?">첫 반려동물의 이름은?</option>
+      <option value="태어난 도시는?">태어난 도시는?</option>
+      <option value="가장 좋아하는 색깔은?">가장 좋아하는 색깔은?</option>
+    </select>
+    <input id="register-security-answer" placeholder="답변" aria-label="보안 질문 답변">
     <div class="error" id="register-error" hidden></div>
     <div class="row">
       <button id="register-submit">가입하기</button>
@@ -391,8 +450,8 @@
   <!-- 새 글 작성 폼 -->
   <div class="card" id="new-post-form" hidden>
     <div class="form-title">새 글 작성</div>
-    <input id="new-post-title" placeholder="제목" maxlength="200">
-    <textarea id="new-post-content" placeholder="내용"></textarea>
+    <input id="new-post-title" placeholder="제목" maxlength="200" aria-label="게시글 제목">
+    <textarea id="new-post-content" placeholder="내용" aria-label="게시글 내용"></textarea>
     <div class="error" id="new-post-error" hidden></div>
     <div class="row">
       <button id="new-post-submit">등록</button>
@@ -403,7 +462,7 @@
   <!-- 목록 화면 -->
   <div id="view-list">
     <div class="search-bar">
-      <input id="search-keyword" placeholder="제목·본문으로 검색">
+      <input id="search-keyword" placeholder="제목·본문으로 검색" aria-label="게시글 검색">
       <button class="secondary" id="search-submit">검색</button>
       <button class="secondary" id="search-clear" hidden>초기화</button>
       <select id="sort-select">
@@ -433,7 +492,7 @@
     <button class="secondary" id="comment-load-more" hidden style="width:100%; margin-bottom:12px;">댓글 더 보기</button>
 
     <div class="card">
-      <textarea id="comment-content" placeholder="댓글 내용" rows="2"></textarea>
+      <textarea id="comment-content" placeholder="댓글 내용" rows="2" aria-label="댓글 내용"></textarea>
       <div class="error" id="comment-error" hidden></div>
       <button id="comment-submit">댓글 등록</button>
     </div>
@@ -515,6 +574,9 @@ const api = {
   register: (body) => fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   login: (body) => fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   logout: (refreshToken) => fetch('/api/auth/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken }) }),
+  securityQuestion: (username) => fetch(`/api/auth/password-reset/question?${new URLSearchParams({ username })}`),
+  verifySecurityAnswer: (body) => fetch('/api/auth/password-reset/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
+  resetPassword: (body) => fetch('/api/auth/password-reset/confirm', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
 };
 
 const el = (id) => document.getElementById(id);
@@ -581,11 +643,12 @@ function showToast(message, type = 'success') {
 
 function showConfirm(message) {
   return new Promise((resolve) => {
+    const previouslyFocused = document.activeElement;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal-box">
-        <p class="modal-message"></p>
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-message">
+        <p class="modal-message" id="modal-message"></p>
         <div class="row">
           <button class="danger" data-action="ok">삭제</button>
           <button class="secondary" data-action="cancel">취소</button>
@@ -596,13 +659,41 @@ function showConfirm(message) {
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('show'));
 
+    const okBtn = overlay.querySelector('[data-action="ok"]');
+    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+    const focusable = [okBtn, cancelBtn];
+    cancelBtn.focus();
+
     const cleanup = (result) => {
       overlay.classList.remove('show');
+      document.removeEventListener('keydown', onKeydown);
       setTimeout(() => overlay.remove(), 150);
+      // 모달을 열기 전 포커스가 있던 요소로 되돌려, 키보드로만 쓰는 사용자가
+      // 모달이 닫힌 뒤 엉뚱한 곳(예: body)에 포커스를 다시 잃지 않게 한다.
+      if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
       resolve(result);
     };
-    overlay.querySelector('[data-action="ok"]').addEventListener('click', () => cleanup(true));
-    overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => cleanup(false));
+
+    // 포커스 트랩: Tab/Shift+Tab이 두 버튼 사이에서만 순환하게 해서, 키보드만 쓰는
+    // 사용자가 모달 뒤의 화면 요소로 포커스가 새어나가지 않게 막는다.
+    function onKeydown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cleanup(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const currentIndex = focusable.indexOf(document.activeElement);
+      const nextIndex = e.shiftKey
+        ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+        : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+      e.preventDefault();
+      focusable[nextIndex].focus();
+    }
+    document.addEventListener('keydown', onKeydown);
+
+    okBtn.addEventListener('click', () => cleanup(true));
+    cancelBtn.addEventListener('click', () => cleanup(false));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
   });
 }
@@ -702,17 +793,27 @@ el('btn-register').addEventListener('click', () => {
   el('login-form').hidden = true;
   el('register-username').value = '';
   el('register-password').value = '';
+  el('register-security-question').selectedIndex = 0;
+  el('register-security-answer').value = '';
   el('register-error').hidden = true;
 });
 el('register-cancel').addEventListener('click', () => { el('register-form').hidden = true; });
 el('register-submit').addEventListener('click', async (e) => {
   const username = el('register-username').value.trim();
   const password = el('register-password').value;
+  const securityQuestion = el('register-security-question').value;
+  const securityAnswer = el('register-security-answer').value.trim();
   const errBox = el('register-error');
   errBox.hidden = true;
 
+  if (!securityAnswer) {
+    errBox.textContent = '보안 질문 답변을 입력해주세요';
+    errBox.hidden = false;
+    return;
+  }
+
   await withLoading(e.target, '가입 중...', async () => {
-    const res = await api.register({ username, password });
+    const res = await api.register({ username, password, securityQuestion, securityAnswer });
     if (res.ok) {
       el('register-form').hidden = true;
       showToast('가입이 완료되었습니다. 로그인해주세요.');
@@ -771,6 +872,99 @@ el('change-password-submit').addEventListener('click', async (e) => {
       errBox.hidden = false;
     } else {
       errBox.textContent = await readError(res, '비밀번호 변경에 실패했습니다.');
+      errBox.hidden = false;
+    }
+  });
+});
+
+// ---------- 비밀번호 찾기 (보안 질문 방식, 3단계) ----------
+let resetUsername = '';
+let resetToken = '';
+
+function showResetStep(step) {
+  el('reset-step-username').hidden = step !== 1;
+  el('reset-step-answer').hidden = step !== 2;
+  el('reset-step-password').hidden = step !== 3;
+}
+
+function closeResetForm() {
+  el('password-reset-form').hidden = true;
+  resetUsername = '';
+  resetToken = '';
+}
+
+el('btn-forgot-password').addEventListener('click', () => {
+  el('login-form').hidden = true;
+  el('password-reset-form').hidden = false;
+  el('reset-username').value = '';
+  el('reset-username-error').hidden = true;
+  showResetStep(1);
+});
+el('reset-cancel-1').addEventListener('click', closeResetForm);
+el('reset-cancel-2').addEventListener('click', closeResetForm);
+el('reset-cancel-3').addEventListener('click', closeResetForm);
+
+el('reset-username-submit').addEventListener('click', async (e) => {
+  const username = el('reset-username').value.trim();
+  const errBox = el('reset-username-error');
+  errBox.hidden = true;
+
+  await withLoading(e.target, '확인 중...', async () => {
+    const res = await api.securityQuestion(username);
+    if (res.ok) {
+      const data = await res.json();
+      resetUsername = username;
+      el('reset-security-question').textContent = data.securityQuestion;
+      el('reset-security-answer').value = '';
+      el('reset-answer-error').hidden = true;
+      showResetStep(2);
+    } else {
+      errBox.textContent = await readError(res, '계정을 찾을 수 없거나 보안 질문이 등록되어 있지 않습니다.');
+      errBox.hidden = false;
+    }
+  });
+});
+
+el('reset-answer-submit').addEventListener('click', async (e) => {
+  const securityAnswer = el('reset-security-answer').value.trim();
+  const errBox = el('reset-answer-error');
+  errBox.hidden = true;
+
+  await withLoading(e.target, '확인 중...', async () => {
+    const res = await api.verifySecurityAnswer({ username: resetUsername, securityAnswer });
+    if (res.ok) {
+      const data = await res.json();
+      resetToken = data.resetToken;
+      el('reset-new-password').value = '';
+      el('reset-new-password-confirm').value = '';
+      el('reset-password-error').hidden = true;
+      showResetStep(3);
+    } else {
+      errBox.textContent = await readError(res, '답변이 일치하지 않습니다.');
+      errBox.hidden = false;
+    }
+  });
+});
+
+el('reset-password-submit').addEventListener('click', async (e) => {
+  const newPassword = el('reset-new-password').value;
+  const newPasswordConfirm = el('reset-new-password-confirm').value;
+  const errBox = el('reset-password-error');
+  errBox.hidden = true;
+
+  if (newPassword !== newPasswordConfirm) {
+    errBox.textContent = '새 비밀번호가 서로 일치하지 않습니다';
+    errBox.hidden = false;
+    return;
+  }
+
+  await withLoading(e.target, '변경 중...', async () => {
+    const res = await api.resetPassword({ resetToken, newPassword });
+    if (res.ok) {
+      closeResetForm();
+      showToast('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
+    } else {
+      errBox.textContent = await readError(res, '재설정 토큰이 유효하지 않거나 만료되었습니다. 처음부터 다시 시도해주세요.');
       errBox.hidden = false;
     }
   });
@@ -852,15 +1046,25 @@ async function loadList(page = currentPage) {
   }
 }
 
-el('search-submit').addEventListener('click', () => {
+function runSearch() {
   currentKeyword = el('search-keyword').value.trim();
   el('search-clear').hidden = !currentKeyword;
   loadList(0);
-});
+}
+el('search-submit').addEventListener('click', runSearch);
 el('search-keyword').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') el('search-submit').click();
+  if (e.key === 'Enter') runSearch();
+});
+// 입력할 때마다 바로 검색하되(실시간 검색), 매 글자마다 요청을 보내면 서버에 부담이 되니
+// 타이핑이 350ms 동안 멈췄을 때만 실제로 검색한다(debounce). Enter/버튼은 그 기다림 없이
+// 바로 검색하고 싶을 때를 위해 그대로 남겨둔다.
+let searchDebounceTimer = null;
+el('search-keyword').addEventListener('input', () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(runSearch, 350);
 });
 el('search-clear').addEventListener('click', () => {
+  clearTimeout(searchDebounceTimer);
   currentKeyword = '';
   el('search-keyword').value = '';
   el('search-clear').hidden = true;

@@ -25,9 +25,20 @@ public class User {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
+    private String securityQuestion;
+
+    private String securityAnswerHash;
+
     public User(String username, String password) {
         this.username = username;
         this.password = password;
+    }
+
+    public User(String username, String password, String securityQuestion, String securityAnswerHash) {
+        this.username = username;
+        this.password = password;
+        this.securityQuestion = securityQuestion;
+        this.securityAnswerHash = securityAnswerHash;
     }
 
     @PrePersist

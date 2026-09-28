@@ -23,3 +23,8 @@ services:
       # 처리되지 않은 예외(500)가 나면 GlobalExceptionHandler가 이 토픽으로 ntfy 알림을 보낸다.
       # 비워두면(.env에 없으면) 조용히 무시된다 — 로컬 개발 환경에서는 안 써도 된다.
       NTFY_TOPIC: ${NTFY_TOPIC:-}
+      # index.html이 인라인 CSS/JS를 포함한 단일 파일이라 용량이 꽤 크다 — 별도 번들러 없이도
+      # gzip으로 압축해 네트워크로 나가는 바이트 수를 줄인다.
+      SERVER_COMPRESSION_ENABLED: "true"
+      SERVER_COMPRESSION_MIME_TYPES: text/html,text/css,application/javascript,application/json
+      SERVER_COMPRESSION_MIN_RESPONSE_SIZE: 1024
