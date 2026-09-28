@@ -17,8 +17,10 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +51,9 @@ class PostServiceTest {
 
     @Mock
     private ViewCountGuard viewCountGuard;
+
+    @Mock
+    private ImageStorageService imageStorageService;
 
     @InjectMocks
     private PostService postService;
@@ -332,5 +337,69 @@ class PostServiceTest {
 
         assertThatThrownBy(() -> postService.toggleLike(999L, "reader"))
                 .isInstanceOf(PostNotFoundException.class);
+    }
+
+    @Test
+    void delete_게시글을_지우면_첨부_이미지도_디스크에서_지운다() {
+        post.setImagePath("old.jpg");
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+
+        postService.delete(1L, "writer");
+
+        verify(imageStorageService).delete("old.jpg");
+        verify(postRepository).delete(post);
+    }
+
+    @Test
+    void uploadImage_본인_게시글이면_저장하고_기존_이미지를_지운다() {
+        post.setImagePath("old.jpg");
+        MultipartFile file = new MockMultipartFile("file", "new.png", "image/png", new byte[]{1, 2, 3});
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(imageStorageService.store(file)).thenReturn("new.png");
+
+        PostDto.Response response = postService.uploadImage(1L, file, "writer");
+
+        assertThat(response.imageUrl()).isEqualTo("/uploads/new.png");
+        verify(imageStorageService).delete("old.jpg");
+    }
+
+    @Test
+    void uploadImage_게시글이_없으면_예외를_던진다() {
+        MultipartFile file = new MockMultipartFile("file", "new.png", "image/png", new byte[]{1});
+        when(postRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> postService.uploadImage(999L, file, "writer"))
+                .isInstanceOf(PostNotFoundException.class);
+    }
+
+    @Test
+    void uploadImage_본인_글이_아니면_예외를_던지고_저장하지_않는다() {
+        MultipartFile file = new MockMultipartFile("file", "new.png", "image/png", new byte[]{1});
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+
+        assertThatThrownBy(() -> postService.uploadImage(1L, file, "other"))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(imageStorageService, never()).store(any());
+    }
+
+    @Test
+    void deleteImage_본인_게시글이면_이미지를_지운다() {
+        post.setImagePath("old.jpg");
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+
+        PostDto.Response response = postService.deleteImage(1L, "writer");
+
+        assertThat(response.imageUrl()).isNull();
+        verify(imageStorageService).delete("old.jpg");
+    }
+
+    @Test
+    void deleteImage_본인_글이_아니면_예외를_던진다() {
+        post.setImagePath("old.jpg");
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+
+        assertThatThrownBy(() -> postService.deleteImage(1L, "other"))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(imageStorageService, never()).delete(any());
     }
 }

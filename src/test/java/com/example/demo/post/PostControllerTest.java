@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -39,7 +40,7 @@ class PostControllerTest {
     private PostService postService;
 
     private static PostDto.Response response(Long id, String title, String content, String author) {
-        return new PostDto.Response(id, title, content, author, LocalDateTime.now(), LocalDateTime.now(), 0, false, 0, 0);
+        return new PostDto.Response(id, title, content, author, LocalDateTime.now(), LocalDateTime.now(), 0, false, 0, 0, null);
     }
 
     @Test
@@ -199,5 +200,45 @@ class PostControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verify(postService, never()).toggleLike(any(), any());
+    }
+
+    @Test
+    void 이미지_업로드_성공시_imageUrl을_포함한_응답을_반환한다() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", new byte[]{1, 2, 3});
+        PostDto.Response withImage = new PostDto.Response(1L, "제목", "내용", "writer",
+                LocalDateTime.now(), LocalDateTime.now(), 0, false, 0, 0, "/uploads/photo.png");
+        when(postService.uploadImage(eq(1L), any(), eq("writer"))).thenReturn(withImage);
+
+        mockMvc.perform(multipart("/api/posts/1/image").file(file).with(user("writer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageUrl").value("/uploads/photo.png"));
+    }
+
+    @Test
+    void 이미지_업로드시_인증이_없으면_401을_반환한다() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", new byte[]{1});
+
+        mockMvc.perform(multipart("/api/posts/1/image").file(file))
+                .andExpect(status().isUnauthorized());
+
+        verify(postService, never()).uploadImage(any(), any(), any());
+    }
+
+    @Test
+    void 이미지_삭제시_204가_아니라_imageUrl이_null인_응답을_반환한다() throws Exception {
+        PostDto.Response withoutImage = response(1L, "제목", "내용", "writer");
+        when(postService.deleteImage(1L, "writer")).thenReturn(withoutImage);
+
+        mockMvc.perform(delete("/api/posts/1/image").with(user("writer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageUrl").isEmpty());
+    }
+
+    @Test
+    void 이미지_삭제시_인증이_없으면_401을_반환한다() throws Exception {
+        mockMvc.perform(delete("/api/posts/1/image"))
+                .andExpect(status().isUnauthorized());
+
+        verify(postService, never()).deleteImage(any(), any());
     }
 }

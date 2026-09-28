@@ -6,6 +6,7 @@ import com.example.demo.auth.InvalidRefreshTokenException;
 import com.example.demo.auth.InvalidResetTokenException;
 import com.example.demo.auth.TooManyLoginAttemptsException;
 import com.example.demo.auth.UserNotFoundException;
+import com.example.demo.post.InvalidImageException;
 import com.example.demo.post.PostNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import java.util.stream.Collectors;
 import com.example.demo.post.CommentNotFoundException;
@@ -81,6 +83,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of(404, "Not Found", e.getMessage()));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(400, "Bad Request", "이미지 크기는 5MB를 넘을 수 없습니다"));
+    }
+
+    @ExceptionHandler(InvalidImageException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidImage(InvalidImageException e) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(400, "Bad Request", e.getMessage()));
     }
 
     @ExceptionHandler(DuplicateUsernameException.class)

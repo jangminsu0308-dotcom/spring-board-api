@@ -189,6 +189,8 @@
 
   .detail-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; }
   .detail-content { white-space: pre-wrap; margin: 14px 0; line-height: 1.6; }
+  .detail-image { max-width: 100%; max-height: 400px; border-radius: 10px; margin: 10px 0; display: block; }
+  .image-preview { max-width: 200px; max-height: 200px; border-radius: 10px; margin: 8px 0; display: block; }
   .detail-actions { display: flex; gap: 8px; margin-top: 10px; }
 
   .comments-heading { font-size: 0.95rem; font-weight: 700; margin: 22px 0 10px; }
@@ -452,6 +454,8 @@
     <div class="form-title">새 글 작성</div>
     <input id="new-post-title" placeholder="제목" maxlength="200" aria-label="게시글 제목">
     <textarea id="new-post-content" placeholder="내용" aria-label="게시글 내용"></textarea>
+    <input type="file" id="new-post-image" accept="image/jpeg,image/png,image/gif,image/webp" aria-label="첨부 이미지 (선택)">
+    <img id="new-post-image-preview" class="image-preview" hidden alt="첨부 이미지 미리보기">
     <div class="error" id="new-post-error" hidden></div>
     <div class="row">
       <button id="new-post-submit">등록</button>
@@ -567,6 +571,12 @@ const api = {
   updatePost: (id, body) => authFetch(`/api/posts/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   deletePost: (id) => authFetch(`/api/posts/${id}`, { method: 'DELETE' }),
   toggleLike: (id) => authFetch(`/api/posts/${id}/like`, { method: 'POST' }),
+  uploadPostImage: (id, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return authFetch(`/api/posts/${id}/image`, { method: 'POST', body: form });
+  },
+  deletePostImage: (id) => authFetch(`/api/posts/${id}/image`, { method: 'DELETE' }),
   comments: (postId, page, size) => fetch(`/api/posts/${postId}/comments?page=${page}&size=${size}`).then(r => r.json()),
   createComment: (postId, body) => authFetch(`/api/posts/${postId}/comments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
   updateComment: (id, body) => authFetch(`/api/comments/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }),
@@ -1158,21 +1168,41 @@ function showNewPostForm({ push = true } = {}) {
   el('new-post-form').hidden = false;
   el('new-post-title').value = '';
   el('new-post-content').value = '';
+  el('new-post-image').value = '';
+  el('new-post-image-preview').hidden = true;
   el('new-post-error').hidden = true;
   if (push) history.pushState({ view: 'new-post' }, '', '#/posts/new');
 }
 
 el('btn-new-post').addEventListener('click', () => showNewPostForm());
 el('new-post-cancel').addEventListener('click', () => showListView());
+el('new-post-image').addEventListener('change', () => {
+  const file = el('new-post-image').files[0];
+  const preview = el('new-post-image-preview');
+  if (!file) {
+    preview.hidden = true;
+    return;
+  }
+  preview.src = URL.createObjectURL(file);
+  preview.hidden = false;
+});
 el('new-post-submit').addEventListener('click', async (e) => {
   const title = el('new-post-title').value.trim();
   const content = el('new-post-content').value.trim();
+  const image = el('new-post-image').files[0];
   const errBox = el('new-post-error');
   errBox.hidden = true;
 
   await withLoading(e.target, '등록 중...', async () => {
     const res = await api.createPost({ title, content });
     if (res.ok) {
+      const post = await res.json();
+      if (image) {
+        const imgRes = await api.uploadPostImage(post.id, image);
+        if (!imgRes.ok) {
+          showToast(await readError(imgRes, '이미지 업로드에 실패했습니다.'), 'error');
+        }
+      }
       showToast('게시글이 등록되었습니다.');
       currentPage = 0;
       showListView();
@@ -1244,6 +1274,7 @@ async function renderDetail() {
   card.innerHTML = `
     <p class="detail-title"></p>
     <p class="post-meta"></p>
+    <img class="detail-image" hidden alt="첨부 이미지">
     <div class="detail-content"></div>
     <div class="post-stats">
       <button class="like-btn" id="detail-like-btn"></button>
@@ -1262,6 +1293,11 @@ async function renderDetail() {
   detailMetaText.textContent = `${post.author} · 작성 ${fmt(post.createdAt)} · 수정 ${fmt(post.updatedAt)}`;
   detailMeta.appendChild(detailMetaText);
   card.querySelector('.detail-content').textContent = post.content;
+  if (post.imageUrl) {
+    const img = card.querySelector('.detail-image');
+    img.src = post.imageUrl;
+    img.hidden = false;
+  }
 
   const detailLikeBtn = card.querySelector('#detail-like-btn');
   renderLikeButton(detailLikeBtn, post.likeCount, post.likedByMe);
@@ -1288,6 +1324,9 @@ async function renderDetail() {
     card.innerHTML = `
       <input id="edit-title" value="${post.title.replace(/"/g,'&quot;')}">
       <textarea id="edit-content"></textarea>
+      <img id="edit-image-preview" class="image-preview" ${post.imageUrl ? '' : 'hidden'} alt="첨부 이미지">
+      <input type="file" id="edit-image" accept="image/jpeg,image/png,image/gif,image/webp" aria-label="첨부 이미지 교체 (선택)">
+      <button class="secondary" id="edit-image-remove" ${post.imageUrl ? '' : 'hidden'}>이미지 삭제</button>
       <div class="error" id="edit-error" hidden></div>
       <div class="row">
         <button id="edit-submit">저장</button>
@@ -1295,19 +1334,44 @@ async function renderDetail() {
       </div>
     `;
     card.querySelector('#edit-content').value = post.content;
+    if (post.imageUrl) card.querySelector('#edit-image-preview').src = post.imageUrl;
+    let editImageRemoved = false;
+
+    card.querySelector('#edit-image').addEventListener('change', () => {
+      const file = card.querySelector('#edit-image').files[0];
+      const preview = card.querySelector('#edit-image-preview');
+      if (!file) return;
+      editImageRemoved = false;
+      preview.src = URL.createObjectURL(file);
+      preview.hidden = false;
+    });
+    card.querySelector('#edit-image-remove').addEventListener('click', () => {
+      editImageRemoved = true;
+      card.querySelector('#edit-image').value = '';
+      card.querySelector('#edit-image-preview').hidden = true;
+      card.querySelector('#edit-image-remove').hidden = true;
+    });
     card.querySelector('#edit-cancel').addEventListener('click', renderDetail);
     card.querySelector('#edit-submit').addEventListener('click', async (e) => {
       const title = card.querySelector('#edit-title').value.trim();
       const content = card.querySelector('#edit-content').value.trim();
+      const newImage = card.querySelector('#edit-image').files[0];
       await withLoading(e.target, '저장 중...', async () => {
         const res = await api.updatePost(post.id, { title, content });
-        if (res.ok) {
-          renderDetail();
-        } else {
+        if (!res.ok) {
           const errBox = card.querySelector('#edit-error');
           errBox.textContent = await readError(res, '수정에 실패했습니다.');
           errBox.hidden = false;
+          return;
         }
+        if (newImage) {
+          const imgRes = await api.uploadPostImage(post.id, newImage);
+          if (!imgRes.ok) showToast(await readError(imgRes, '이미지 업로드에 실패했습니다.'), 'error');
+        } else if (editImageRemoved && post.imageUrl) {
+          const imgRes = await api.deletePostImage(post.id);
+          if (!imgRes.ok) showToast(await readError(imgRes, '이미지 삭제에 실패했습니다.'), 'error');
+        }
+        renderDetail();
       });
     });
   });

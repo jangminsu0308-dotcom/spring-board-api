@@ -26,7 +26,8 @@ public class PostDto {
 		long likeCount,
 		boolean likedByMe,
 		long commentCount,
-		long viewCount
+		long viewCount,
+		String imageUrl
 	) {
 		// 좋아요·댓글 개수는 Post 엔티티만으로는 알 수 없다(별도 테이블 집계가 필요) —
 		// 그래서 from(Post)이 아니라 이미 집계해온 값을 그대로 받는다. viewCount는 Post 자신의
@@ -42,7 +43,8 @@ public class PostDto {
 				likeCount,
 				likedByMe,
 				commentCount,
-				post.getViewCount()
+				post.getViewCount(),
+				post.getImagePath() == null ? null : "/uploads/" + post.getImagePath()
 			);
 		}
 	}

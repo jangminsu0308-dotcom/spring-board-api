@@ -42,6 +42,9 @@ src/main/resources/application-prod.properties
 *.log
 logs/
 
+### 로컬에서 업로드된 게시글 이미지 (도커에서는 named volume에 저장된다) ###
+/uploads/
+
 ### OS ###
 .DS_Store
 Thumbs.db

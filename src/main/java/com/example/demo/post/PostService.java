@@ -12,6 +12,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -31,6 +32,7 @@ public class PostService {
 	private final CommentRepository commentRepository;
 	private final RateLimiterService rateLimiter;
 	private final ViewCountGuard viewCountGuard;
+	private final ImageStorageService imageStorageService;
 
 	private static final int MAX_POSTS_PER_MINUTE = 5;
 
@@ -134,7 +136,35 @@ public class PostService {
 		Post post = postRepository.findById(id)
 			.orElseThrow(() -> new PostNotFoundException(id));
 		validateOwner(post.getAuthor().getUsername(), username);
+		imageStorageService.delete(post.getImagePath());
 		postRepository.delete(post);
+	}
+
+	/** 이미 첨부된 이미지가 있으면 새 이미지로 교체한다(기존 파일은 디스크에서 지운다). */
+	@Transactional
+	public PostDto.Response uploadImage(Long id, MultipartFile file, String username) {
+		Post post = postRepository.findById(id)
+			.orElseThrow(() -> new PostNotFoundException(id));
+		validateOwner(post.getAuthor().getUsername(), username);
+
+		String previousImagePath = post.getImagePath();
+		String newImagePath = imageStorageService.store(file);
+		post.setImagePath(newImagePath);
+		imageStorageService.delete(previousImagePath);
+
+		return toResponse(post, username);
+	}
+
+	@Transactional
+	public PostDto.Response deleteImage(Long id, String username) {
+		Post post = postRepository.findById(id)
+			.orElseThrow(() -> new PostNotFoundException(id));
+		validateOwner(post.getAuthor().getUsername(), username);
+
+		imageStorageService.delete(post.getImagePath());
+		post.setImagePath(null);
+
+		return toResponse(post, username);
 	}
 
 	/** 이미 좋아요를 눌렀으면 취소하고, 안 눌렀으면 좋아요를 남긴다. */

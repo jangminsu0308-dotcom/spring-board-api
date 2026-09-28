@@ -15,6 +15,8 @@ WORKDIR /app
 
 RUN useradd --create-home --shell /bin/false appuser
 COPY --from=build /app/target/demo-0.0.1-SNAPSHOT.jar app.jar
+# 게시글 첨부 이미지가 저장되는 디렉터리 — appuser가 쓸 수 있게 미리 만들고 소유권을 넘긴다.
+RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8080

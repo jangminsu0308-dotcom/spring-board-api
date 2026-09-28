@@ -1,10 +1,12 @@
 package com.example.demo.post;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import java.net.URI;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -65,6 +67,20 @@ public class PostController {
     public ResponseEntity<Void> delete(@PathVariable Long id, Authentication authentication) {
         postService.delete(id, authentication.getName());
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "게시글 이미지 업로드", description = "본인이 작성한 게시글에 이미지를 첨부합니다(jpg/png/gif/webp, 5MB 이하). 이미 첨부된 이미지가 있으면 교체됩니다.")
+    @SecurityRequirement(name = BEARER_AUTH)
+    @PostMapping(value = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public PostDto.Response uploadImage(@PathVariable Long id, @RequestParam("file") MultipartFile file, Authentication authentication) {
+        return postService.uploadImage(id, file, authentication.getName());
+    }
+
+    @Operation(summary = "게시글 이미지 삭제", description = "본인이 작성한 게시글에서 첨부 이미지를 제거합니다.")
+    @SecurityRequirement(name = BEARER_AUTH)
+    @DeleteMapping("/{id}/image")
+    public PostDto.Response deleteImage(@PathVariable Long id, Authentication authentication) {
+        return postService.deleteImage(id, authentication.getName());
     }
 
     @Operation(summary = "좋아요 토글", description = "이미 눌렀으면 취소하고, 안 눌렀으면 좋아요를 남깁니다. 로그인이 필요합니다.")

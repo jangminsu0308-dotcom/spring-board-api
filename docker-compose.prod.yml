@@ -28,3 +28,11 @@ services:
       SERVER_COMPRESSION_ENABLED: "true"
       SERVER_COMPRESSION_MIME_TYPES: text/html,text/css,application/javascript,application/json
       SERVER_COMPRESSION_MIN_RESPONSE_SIZE: 1024
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 5MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 5MB
+    volumes:
+      # 컨테이너를 재배포해도 이미 업로드된 게시글 이미지가 지워지지 않게 이름 있는 볼륨에 남긴다.
+      - uploads-data:/app/uploads
+
+volumes:
+  uploads-data:

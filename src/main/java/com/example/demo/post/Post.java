@@ -39,6 +39,8 @@ public class Post {
 	@Column(nullable = false)
 	private long viewCount = 0;
 
+	private String imagePath;
+
 	public Post(String title, String content, User author) {
 		this.title = title;
 		this.content = content;
@@ -47,6 +49,10 @@ public class Post {
 
 	public void increaseViewCount() {
 		this.viewCount++;
+	}
+
+	public void setImagePath(String imagePath) {
+		this.imagePath = imagePath;
 	}
 
 	@PrePersist
