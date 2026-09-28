@@ -55,7 +55,73 @@ jobs:
           name: surefire-reports
           path: target/surefire-reports/
 
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: 앱 스택 기동 (docker compose, mysql+app; Dockerfile 안에서 자체적으로 Maven 빌드)
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: docker compose up -d --build
+
+      - name: 앱이 뜰 때까지 대기
+        run: |
+          for i in $(seq 1 40); do
+            if curl -sf "http://localhost:8080/api/posts?page=0&size=1" > /dev/null; then
+              echo "앱이 준비됐습니다."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "앱이 제한 시간 안에 뜨지 않았습니다."
+          docker compose logs app
+          exit 1
+
+      - name: Playwright 설치
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: E2E 테스트 실행
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: 테스트 리포트 업로드 (실패 시 확인용)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+
+      - name: 앱 로그 업로드 (실패 시 확인용)
+        if: failure()
+        run: docker compose logs app > app.log
+      - name: 앱 로그 첨부
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-logs
+          path: app.log
+
+      - name: 컨테이너 정리
+        if: always()
+        run: docker compose down -v
+
   deploy:
+    # e2e는 배포를 막지 않는다 — GitHub Actions 호스트 러너에서 도커 컴포즈로 앱 전체를
+    # 띄우는 잡이라 인프라 쪽 변수(네트워크, 이미지 빌드 시간 등)가 test보다 많다. 당장은
+    # 병행 실행해 신호로만 쓰고, 충분히 안정적이라고 확인되면 이후에 게이트로 올린다.
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: self-hosted
